@@ -194,3 +194,10 @@ uv run hf cache rm model/<repo id>
 
 `rm` asks first, and takes `--dry-run`. It removes the whole repo directory,
 `experts.pack` included.
+
+## License
+
+MIT, in [LICENSE](LICENSE).
+
+`model/qwen3_5/_gated_delta_metal.py` is adapted from mlx-lm 0.31.3 and
+carries Apple's MIT notice in the file itself.
