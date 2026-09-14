@@ -326,6 +326,7 @@ dependencies = [
 dev = [
     { name = "mlx-lm" },
     { name = "pytest" },
+    { name = "pywsl-lint" },
     { name = "ruff" },
 ]
 
@@ -343,6 +344,7 @@ requires-dist = [
 dev = [
     { name = "mlx-lm", specifier = ">=0.31.3" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pywsl-lint", specifier = ">=0.2.0" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
 
@@ -503,6 +505,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
+]
+
+[[package]]
+name = "pywsl-lint"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/da/db9598b5b4f28b47ba53f3df05241823768731dea7f569e8eb15e6e812b5/pywsl_lint-0.2.0.tar.gz", hash = "sha256:645869b2af45bcfe8233de368bbb873aba895a2d3dd50006ca3db58b4977a02a", size = 37957, upload-time = "2026-09-14T18:39:52.244Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/97/689f09fd3aac78570fa44ce5a70e5b9afb6fa0cedc7b347743f7b1a0a70d/pywsl_lint-0.2.0-py3-none-any.whl", hash = "sha256:db97c50a1ca65cdf42bb81d0acdcbfd6be7a6ab06047140bd52c780aa15559a0", size = 30710, upload-time = "2026-09-14T18:39:51.161Z" },
 ]
 
 [[package]]
