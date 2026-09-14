@@ -50,7 +50,9 @@ class StackedExpertStreamer:
     def _expert_location(self, whole: TensorLocation, expert: int) -> TensorLocation:
         """`expert`'s contiguous byte range within the stacked tensor
         `whole`, which is C-contiguous and stacked along axis 0."""
+
         per_expert_length = whole.length // self.num_experts
+
         return TensorLocation(
             shard=whole.shard,
             dtype=whole.dtype,
@@ -66,6 +68,7 @@ class StackedExpertStreamer:
         loc = self._expert_location(whole, expert)
         fd = self._fds.fd_for_shard(loc.shard)
         raw = os.pread(fd, loc.length, loc.offset)
+
         return decode_tensor(
             raw, loc.dtype, loc.shape, stored_width=keeps_stored_width(field)
         )
@@ -73,25 +76,30 @@ class StackedExpertStreamer:
     def _projection_fields(self, layer: int, proj: str) -> tuple[str, ...]:
         """Which of weight/scales/biases this projection actually has: a
         mixed checkpoint can leave one dense while its neighbours are not."""
+
         fields = tuple(
             field
             for field in _FIELDS
             if self._tensor_name(layer, proj, field) in self.index
         )
+
         if "weight" not in fields:
             raise KeyError(
                 f"no weight tensor for expert projection layer {layer} {proj}"
             )
+
         if "scales" not in fields and fields != ("weight",):
             raise ValueError(
                 f"expert projection layer {layer} {proj} has biases but no scales"
             )
+
         return fields
 
     @staticmethod
     def _assemble_projection(tensors: dict[str, mx.array]):
         """A weight-only projection is dense, and is handed back as the array
         itself rather than a one-key dict."""
+
         return tensors["weight"] if tensors.keys() == {"weight"} else tensors
 
     def load_expert(self, layer: int, expert: int) -> dict[str, dict[str, mx.array]]:
@@ -110,6 +118,7 @@ class StackedExpertStreamer:
     ) -> list[dict[str, dict[str, mx.array]]]:
         """`load_expert` for each of `experts`, every read submitted to
         `executor` as one flat batch: nested futures could deadlock."""
+
         projection_fields = {
             proj: self._projection_fields(layer, proj) for proj in self.projections
         }
@@ -128,9 +137,11 @@ class StackedExpertStreamer:
             for expert, proj, field in keys
         }
         partial: dict[int, dict[str, dict[str, mx.array]]] = {}
+
         for future in as_completed(futures):
             expert, proj, field = futures[future]
             partial.setdefault(expert, {}).setdefault(proj, {})[field] = future.result()
+
         return [
             {
                 proj: self._assemble_projection(partial[expert][proj])

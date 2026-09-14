@@ -21,6 +21,7 @@ class KVCache(Protocol):
 
     def state(self) -> tuple[mx.array, mx.array]:
         """Keys/values for every token currently held, in chronological order."""
+
         ...
 
 
@@ -37,6 +38,7 @@ class GrowingKVCache:
     ) -> None:
         if max_context <= 0:
             raise ValueError(f"max_context must be positive, got {max_context}")
+
         self.capacity = max_context
         self._keys = mx.zeros((num_kv_heads, 0, head_dim), dtype=dtype)
         self._values = mx.zeros((num_kv_heads, 0, head_dim), dtype=dtype)
@@ -48,21 +50,27 @@ class GrowingKVCache:
     def append_many(self, keys: mx.array, values: mx.array) -> None:
         """Append a head-major ``(heads, tokens, dim)`` batch in two writes,
         checked before either buffer is touched."""
+
         if keys.ndim != 3 or values.shape != keys.shape:
             raise ValueError(
                 "keys and values must have matching (heads, tokens, dim) shapes"
             )
+
         if keys.shape[0] != self._keys.shape[0] or keys.shape[2] != self._keys.shape[2]:
             raise ValueError(
                 "keys and values do not match the cache head count or dimension"
             )
+
         end = self._written + keys.shape[1]
+
         if end > self.capacity:
             raise IndexError(
                 f"GrowingKVCache exceeded its capacity of {self.capacity} tokens"
             )
+
         if end == self._written:
             return
+
         if end > self.allocated_size:
             allocated = min(self.capacity, ((end + 255) // 256) * 256)
             shape = (
@@ -76,6 +84,7 @@ class GrowingKVCache:
             self._values = mx.concatenate(
                 [self._values, mx.zeros(shape, dtype=self._values.dtype)], axis=1
             )
+
         self._keys[:, self._written : end, :] = keys
         self._values[:, self._written : end, :] = values
         self._written = end

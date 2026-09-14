@@ -27,16 +27,20 @@ def _parse_shard_header(path: Path) -> tuple[dict, int]:
     with path.open("rb") as f:
         (header_len,) = struct.unpack("<Q", f.read(8))
         header = json.loads(f.read(header_len))
+
     data_start = 8 + header_len
+
     return header, data_start
 
 
 def _index_shard(shard_path: Path, shard_name: str) -> dict[str, TensorLocation]:
     header, data_start = _parse_shard_header(shard_path)
     index: dict[str, TensorLocation] = {}
+
     for name, meta in header.items():
         if name == "__metadata__":
             continue
+
         start, end = meta["data_offsets"]
         index[name] = TensorLocation(
             shard=shard_name,
@@ -45,6 +49,7 @@ def _index_shard(shard_path: Path, shard_name: str) -> dict[str, TensorLocation]
             offset=data_start + start,
             length=end - start,
         )
+
     return index
 
 
@@ -53,9 +58,12 @@ def _discover_shards(model_dir: Path) -> list[str]:
     if index_json.exists():
         weight_map = json.loads(index_json.read_text())["weight_map"]
         return sorted(set(weight_map.values()))
+
     single = model_dir / "model.safetensors"
+
     if single.exists():
         return [single.name]
+
     raise FileNotFoundError(
         f"no {_INDEX_FILENAME} or model.safetensors found under {model_dir}"
     )
@@ -64,7 +72,9 @@ def _discover_shards(model_dir: Path) -> list[str]:
 def checkpoint_is_complete(model_dir: str | Path) -> bool:
     """Whether every shard is present and as long as its own header says,
     decided offline. Not a hash check; `download.py` verifies sha256."""
+
     model_dir = Path(model_dir)
+
     try:
         shards = _discover_shards(model_dir)
     except (FileNotFoundError, KeyError, ValueError):
@@ -74,12 +84,14 @@ def checkpoint_is_complete(model_dir: str | Path) -> bool:
         path = model_dir / shard_name
         if not path.exists():
             return False
+
         try:
             header, data_start = _parse_shard_header(path)
         except (OSError, struct.error, json.JSONDecodeError):
             # Too short to even hold a header, or the header itself landed
             # truncated mid-JSON.
             return False
+
         data_end = max(
             (
                 meta["data_offsets"][1]
@@ -88,8 +100,10 @@ def checkpoint_is_complete(model_dir: str | Path) -> bool:
             ),
             default=0,
         )
+
         if path.stat().st_size < data_start + data_end:
             return False
+
     return True
 
 
@@ -97,6 +111,7 @@ def build_index(
     model_dir: str | Path, *, use_cache: bool = True
 ) -> dict[str, TensorLocation]:
     """Build (or load a cached) tensor -> :class:`TensorLocation` index."""
+
     model_dir = Path(model_dir)
     sidecar = model_dir / _SIDECAR_FILENAME
 

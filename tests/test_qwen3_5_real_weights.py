@@ -44,12 +44,14 @@ def config():
 def streamer():
     s = TensorStreamer(QWEN3_5_MODEL_DIR, build_index(QWEN3_5_MODEL_DIR))
     yield s
+
     s.close()
 
 
 def read_quantized(streamer: TensorStreamer, name: str) -> dict[str, mx.array]:
     """Read one quantized tensor's ``weight``/``scales``/``biases`` triple
     off ``name``'s prefix (e.g. ``"model.layers.0.mlp.gate"``)."""
+
     return {
         "weight": streamer.read_tensor(f"{name}.weight"),
         "scales": streamer.read_tensor(f"{name}.scales"),
@@ -60,6 +62,7 @@ def read_quantized(streamer: TensorStreamer, name: str) -> dict[str, mx.array]:
 def _dequantize(tensors, quant) -> mx.array:
     """The reference's dense weight at full precision: `mx.dequantize`
     returns whatever dtype its scales carry, bfloat16 included."""
+
     return mx.dequantize(
         tensors["weight"],
         scales=tensors["scales"].astype(mx.float32),
@@ -131,12 +134,14 @@ def test_linear_attention_matches_mlx_lm_on_real_weights(config, streamer, seq_l
     ref = qwen3_5_ref.GatedDeltaNet(_ref_args(config))
     for name in ("in_proj_qkv", "in_proj_z", "in_proj_a", "in_proj_b", "out_proj"):
         getattr(ref, name).weight = _dequantize(tensors[name], quant)
+
     ref.conv1d.weight = conv_weight
     ref.A_log = A_log
     ref.dt_bias = dt_bias
     ref.norm.weight = norm_weight
 
     mx.random.seed(0)
+
     x = mx.random.normal((seq_len, config.hidden_size))
     cache = RecurrentCache(
         conv_kernel_dim=config.linear.conv_kernel_dim,
@@ -150,6 +155,7 @@ def test_linear_attention_matches_mlx_lm_on_real_weights(config, streamer, seq_l
     got = ours(x, cache)
     expected = ref(x[None], mask=None, cache=ref_cache)[0]
     mx.eval(got, expected)
+
     assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(
         mx.max(mx.abs(got - expected)).item()
     )
@@ -160,7 +166,9 @@ def test_linear_attention_matches_mlx_lm_on_real_weights(config, streamer, seq_l
         x = mx.random.normal((length, config.hidden_size))
         got, expected = ours(x, cache), ref(x[None], mask=None, cache=ref_cache)[0]
         mx.eval(got, expected)
+
         assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item()
+
         for actual, reference in zip(cache.state(), ref_cache.state):
             assert mx.allclose(actual, reference[0], rtol=1e-3, atol=1e-3).item()
 
@@ -188,10 +196,12 @@ def test_full_attention_matches_mlx_lm_on_real_weights(config, streamer):
     ref = qwen3_next_ref.Qwen3NextAttention(_ref_args(config))
     for name in ("q_proj", "k_proj", "v_proj", "o_proj"):
         getattr(ref, name).weight = _dequantize(tensors[name], quant)
+
     ref.q_norm.weight = q_norm
     ref.k_norm.weight = k_norm
 
     mx.random.seed(1)
+
     x = mx.random.normal((4, config.hidden_size))
     cache = GrowingKVCache(
         max_context=16,
@@ -204,6 +214,7 @@ def test_full_attention_matches_mlx_lm_on_real_weights(config, streamer):
     mlx_lm_cache = pytest.importorskip("mlx_lm.models.cache")
     expected = ref(x[None], mask="causal", cache=mlx_lm_cache.KVCache())[0]
     mx.eval(got, expected)
+
     assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(
         mx.max(mx.abs(got - expected)).item()
     )
@@ -212,9 +223,11 @@ def test_full_attention_matches_mlx_lm_on_real_weights(config, streamer):
 def test_q_proj_really_is_double_width_for_the_output_gate(config, streamer):
     """The gate has no tensor of its own: it is the second half of q_proj's
     output, confirmed here on the real checkpoint."""
+
     q_proj = read_quantized(streamer, f"{PREFIX}.layers.{FULL_LAYER}.self_attn.q_proj")
     k_proj = read_quantized(streamer, f"{PREFIX}.layers.{FULL_LAYER}.self_attn.k_proj")
     assert q_proj["scales"].shape[0] == config.num_attention_heads * config.head_dim * 2
     assert k_proj["scales"].shape[0] == config.num_key_value_heads * config.head_dim
+
     prefix = f"{PREFIX}.layers.{FULL_LAYER}.self_attn"
     assert f"{prefix}.gate_proj.weight" not in streamer.index

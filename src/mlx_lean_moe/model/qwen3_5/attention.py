@@ -40,10 +40,12 @@ class Qwen3_5Attention:
     def __call__(self, x: mx.array, cache: KVCache) -> mx.array:
         """``x``: ``(hidden_size,)`` for one decode step, or
         ``(L, hidden_size)`` for a batched prefill. Returns the same rank."""
+
         if x.ndim not in (1, 2):
             raise ValueError(
                 f"Qwen3_5Attention expects 1-D or 2-D x, got shape {x.shape}"
             )
+
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
         seq_len = rows.shape[0]
@@ -81,6 +83,7 @@ class Qwen3_5Attention:
         )
 
         cache.append_many(k[0], v[0])
+
         keys, values = cache.state()  # (n_kv_heads, T_kv, head_dim), already head-major
         keys, values = keys[None], values[None]
 
@@ -92,4 +95,5 @@ class Qwen3_5Attention:
 
         out = out * mx.sigmoid(gate.reshape(seq_len, -1))
         out = quantized_linear(out, self.o_proj, quant)
+
         return out[0] if squeeze else out

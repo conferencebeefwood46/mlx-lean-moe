@@ -23,7 +23,9 @@ def _build_model(
 ) -> GenerativeModel:
     """The only place an architecture-specific model class is instantiated,
     and it names none of them."""
+
     model_cls = model_class_for(config)
+
     return model_cls(
         model_dir,
         config,
@@ -57,8 +59,10 @@ class ChatSession:
     def _common_prefix_len(self, token_ids: list[int]) -> int:
         limit = min(len(self._committed), len(token_ids))
         n = 0
+
         while n < limit and self._committed[n] == token_ids[n]:
             n += 1
+
         return n
 
     def reset(self) -> None:
@@ -66,17 +70,21 @@ class ChatSession:
 
         A KV cache only moves forward, so a diverging history starts over.
         """
+
         reset_cache = getattr(self.model, "reset_cache", None)
+
         if callable(reset_cache):
             reset_cache()
         else:
             self.model.close()
+
             self.model = _build_model(
                 self.model_dir,
                 self.config,
                 self.max_context,
                 self.expert_cache_size_per_layer,
             )
+
         self._committed = []
         self._logits = None
         self.last_prefill_len = 0
@@ -90,12 +98,17 @@ class ChatSession:
     ) -> Iterator[int]:
         """Yields token ids one at a time; `token_ids` is this turn's full
         context. A token the caller stops on is never committed."""
+
         common = self._common_prefix_len(token_ids)
+
         if common < len(self._committed):
             self.reset()
+
             common = 0
+
         new_suffix = token_ids[common:]
         self.last_prefill_len = len(new_suffix)
+
         if new_suffix:
             self._logits = self.model.prefill(new_suffix)
             self._committed = list(token_ids)
@@ -109,8 +122,10 @@ class ChatSession:
         for step in range(max_new_tokens):
             next_token = pick(self._logits)
             yield next_token
+
             if (step + 1) % clear_cache_every == 0:
                 mx.clear_cache()
+
             self._logits = self.model(next_token)
             self._committed.append(next_token)
 
@@ -136,7 +151,9 @@ def generate(
 ) -> Iterator[int]:
     """One turn through a fresh :class:`ChatSession`, closed afterwards; use
     `ChatSession` itself to reuse the cache across turns."""
+
     max_context = max_context or (len(prompt_tokens) + max_new_tokens)
+
     with ChatSession(
         model_dir, config, max_context, expert_cache_size_per_layer
     ) as session:

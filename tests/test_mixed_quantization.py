@@ -19,6 +19,7 @@ def _quantize(
         mode=scheme.mode,
     )
     mx.eval(packed, scales, biases)
+
     return np.array(packed), np.array(scales), np.array(biases)
 
 
@@ -45,16 +46,20 @@ def test_linear_loader_runs_adjacent_projections_with_their_own_schemes(tmp_path
         name: rng.normal(0, 0.1, (9, 64)).astype(np.float32) for name in schemes
     }
     tensors: dict[str, np.ndarray] = {"dense_proj.weight": dense_weight}
+
     for name, scheme in schemes.items():
         _add_quantized(tensors, name, source_weights[name], scheme)
+
     save_file(tensors, str(tmp_path / "model.safetensors"))
 
     streamer = TensorStreamer(tmp_path, build_index(tmp_path, use_cache=False))
     x = mx.array(rng.normal(0, 0.1, (3, 64)).astype(np.float32))
+
     for name, scheme in schemes.items():
         loaded = read_linear(streamer, name, scheme)
         assert isinstance(loaded, LinearWeights)
         assert loaded.quant == scheme
+
         actual = quantized_linear(x, loaded)
         reference = (
             x
@@ -75,9 +80,11 @@ def test_linear_loader_runs_adjacent_projections_with_their_own_schemes(tmp_path
 
     dense = read_linear(streamer, "dense_proj", QuantScheme(bits=4, group_size=64))
     assert dense.quant is None
+
     np.testing.assert_allclose(
         np.array(quantized_linear(x, dense)), np.array(x @ mx.array(dense_weight).T)
     )
+
     streamer.close()
 
 
@@ -88,6 +95,7 @@ def test_linear_row_streaming_supports_quantized_and_dense_tables(tmp_path):
     dense_weight = rng.normal(0, 0.1, (7, 64)).astype(np.float32)
     tensors = {"dense.weight": dense_weight}
     _add_quantized(tensors, "quantized", quantized_weight, scheme)
+
     save_file(tensors, str(tmp_path / "model.safetensors"))
 
     streamer = TensorStreamer(tmp_path, build_index(tmp_path, use_cache=False))
@@ -102,10 +110,12 @@ def test_linear_row_streaming_supports_quantized_and_dense_tables(tmp_path):
         bits=scheme.bits,
     )
     np.testing.assert_allclose(np.array(actual), np.array(reference))
+
     np.testing.assert_array_equal(
         np.array(streamer.read_linear_rows("dense", rows, scheme)),
         dense_weight[rows],
     )
+
     streamer.close()
 
 
@@ -117,9 +127,12 @@ def test_linear_loader_rejects_partial_quantization_fields(tmp_path):
         },
         str(tmp_path / "model.safetensors"),
     )
+
     streamer = TensorStreamer(tmp_path, build_index(tmp_path, use_cache=False))
+
     with pytest.raises(ValueError, match="biases but no scales"):
         read_linear(streamer, "broken", QuantScheme(bits=4, group_size=64))
+
     streamer.close()
 
 

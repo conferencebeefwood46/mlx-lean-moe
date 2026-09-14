@@ -44,6 +44,7 @@ class _RangeHandler(http.server.BaseHTTPRequestHandler):
         data = SERVED.get(self.path.lstrip("/"))
         if data is None:
             self.send_error(404)
+
             return
 
         header = self.headers.get("Range")
@@ -51,17 +52,26 @@ class _RangeHandler(http.server.BaseHTTPRequestHandler):
             first, _, last = header.removeprefix("bytes=").partition("-")
             start = int(first)
             end = int(last) if last else len(data) - 1
+
             if start >= len(data):
                 self.send_error(416)
+
                 return
+
             body = data[start : end + 1]
+
             self.send_response(206)
+
             self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
         else:
             body = data
+
             self.send_response(200)
+
         self.send_header("Content-Length", str(len(body)))
+
         self.end_headers()
+
         self.wfile.write(body)
 
     def log_message(self, *args):
@@ -72,7 +82,9 @@ class _RangeHandler(http.server.BaseHTTPRequestHandler):
 def server():
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RangeHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
     yield f"http://127.0.0.1:{httpd.server_address[1]}"
+
     httpd.shutdown()
 
 
@@ -84,8 +96,11 @@ class _IgnoresRangeHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(200)
+
         self.send_header("Content-Length", str(len(PAYLOAD)))
+
         self.end_headers()
+
         self.wfile.write(PAYLOAD)
 
     def log_message(self, *args):
@@ -96,7 +111,9 @@ class _IgnoresRangeHandler(http.server.BaseHTTPRequestHandler):
 def server_ignoring_ranges():
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _IgnoresRangeHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
     yield f"http://127.0.0.1:{httpd.server_address[1]}"
+
     httpd.shutdown()
 
 
@@ -109,12 +126,14 @@ def client():
 def test_fetch_range_downloads_exactly_the_requested_bytes(server, client, tmp_path):
     out = tmp_path / "part"
     _fetch_range(client, f"{server}/model.bin", out, 1000, 1999)
+
     assert out.read_bytes() == PAYLOAD[1000:2000]
 
 
 def test_fetch_range_resumes_from_a_partial_part(server, client, tmp_path):
     """Simulates an interrupted transfer: a part holding a valid prefix must
     be continued, not restarted and not appended to blindly."""
+
     out = tmp_path / "part"
     out.write_bytes(PAYLOAD[1000:1400])  # 400 of the 1000 bytes we want
 
@@ -126,6 +145,7 @@ def test_fetch_range_resumes_from_a_partial_part(server, client, tmp_path):
 def test_fetch_range_restarts_an_oversized_part(server, client, tmp_path):
     """A part longer than its range holds duplicated bytes interleaved, so
     it cannot be truncated back into shape."""
+
     out = tmp_path / "part"
     out.write_bytes(PAYLOAD[1000:1400] + PAYLOAD[1000:2000])  # duplicated prefix
 
@@ -139,8 +159,10 @@ def test_fetch_range_reports_a_resumed_prefix_without_refetching_it(
 ):
     """Bytes already on disk are progress too; ignoring them starts a
     resumed download at 0%."""
+
     out = tmp_path / "part"
     out.write_bytes(PAYLOAD[1000:1400])
+
     deltas = []
 
     _fetch_range(client, f"{server}/model.bin", out, 1000, 1999, on_bytes=deltas.append)
@@ -154,10 +176,12 @@ def test_fetch_range_starting_from_an_oversized_part_still_totals_the_range(
 ):
     """After a discard and refetch the deltas must still add up to the range
     itself, not to the range plus what the bad file held."""
+
     out = tmp_path / "part"
     out.write_bytes(
         PAYLOAD[1000:1400] + PAYLOAD[1000:2000]
     )  # 1400 bytes for a 1000-byte range
+
     deltas = []
 
     _fetch_range(client, f"{server}/model.bin", out, 1000, 1999, on_bytes=deltas.append)
@@ -170,6 +194,7 @@ def test_fetch_range_takes_back_the_bytes_of_a_part_it_discards(
 ):
     """Bytes reported for a part that is then discarded have to be taken
     back, or every doomed attempt drives the total past 100%."""
+
     out = tmp_path / "part"
     deltas = []
 
@@ -197,6 +222,7 @@ def test_fetch_range_is_a_no_op_when_the_part_is_already_complete(
 ):
     out = tmp_path / "part"
     out.write_bytes(PAYLOAD[1000:2000])
+
     mtime = out.stat().st_mtime_ns
 
     _fetch_range(client, f"{server}/model.bin", out, 1000, 1999)
@@ -244,6 +270,7 @@ def test_download_file_rejects_a_wrong_sha256(server, client, tmp_path):
 def test_download_file_skips_a_file_that_is_already_complete(server, client, tmp_path):
     target = tmp_path / "model.bin"
     target.write_bytes(PAYLOAD)
+
     mtime = target.stat().st_mtime_ns
     remote = RemoteFile("model.bin", len(PAYLOAD), hashlib.sha256(PAYLOAD).hexdigest())
 
@@ -268,6 +295,7 @@ def test_download_file_handles_a_file_smaller_than_one_chunk(server, client, tmp
 def test_download_file_reports_every_byte_exactly_once(server, client, tmp_path):
     """The deltas have to sum to the file, not to some multiple of it: a
     retry re-reporting a range it already counted inflates the total."""
+
     deltas = []
     remote = RemoteFile("model.bin", len(PAYLOAD), None)
 
@@ -293,6 +321,7 @@ def _serve_locally(monkeypatch, server):
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.httpx.Client", partial(httpx.Client, base_url="")
     )
+
     original = dl._download_file
 
     def to_local(client, url, target, remote, *args, **kwargs):
@@ -306,10 +335,12 @@ def _serve_locally(monkeypatch, server):
 def test_download_repo_writes_every_file_and_resumes(monkeypatch, server, tmp_path):
     """End-to-end through the public entry point, with the file list
     injected so the test needs no network metadata call."""
+
     files = [
         RemoteFile("small.json", 18, None),
         RemoteFile("model.bin", len(PAYLOAD), hashlib.sha256(PAYLOAD).hexdigest()),
     ]
+
     _serve_locally(monkeypatch, server)
 
     dest = download_repo(
@@ -334,11 +365,14 @@ def test_download_repo_reports_progress_across_the_whole_repo(
 ):
     """Totals are repo-wide: per file, a bar restarts at 0% once per shard.
     The last call reports the whole thing done."""
+
     files = [
         RemoteFile("small.json", 18, None),
         RemoteFile("model.bin", len(PAYLOAD), None),
     ]
+
     _serve_locally(monkeypatch, server)
+
     seen = []
 
     download_repo(
@@ -362,14 +396,18 @@ def test_download_repo_counts_files_that_were_already_there(
 ):
     """Resuming a checkpoint whose small files landed before the interruption
     must not start the bar at 0%: those bytes are on disk and are progress."""
+
     files = [
         RemoteFile("small.json", 18, None),
         RemoteFile("model.bin", len(PAYLOAD), None),
     ]
     dest = repo_dir("some-org/some-model", tmp_path) / "snapshots" / COMMIT
     dest.mkdir(parents=True)
+
     (dest / "small.json").write_bytes(b'{"hello": "world"}')
+
     _serve_locally(monkeypatch, server)
+
     seen = []
 
     download_repo(
@@ -394,10 +432,13 @@ def test_the_cache_layout_is_the_hub_s_own(tmp_path):
 
     repo = repo_dir("org/name", tmp_path)
     (repo / "snapshots" / COMMIT).mkdir(parents=True)
+
     (repo / "refs").mkdir()
+
     (repo / "refs" / "main").write_text(
         COMMIT + "\n"
     )  # git writes a newline; resolving must not care
+
     assert snapshot_dir("org/name", tmp_path) == repo / "snapshots" / COMMIT
     # A commit is taken as one, without consulting refs.
     assert snapshot_dir("org/name", tmp_path, COMMIT) == repo / "snapshots" / COMMIT
@@ -407,6 +448,7 @@ def test_the_cache_layout_is_the_hub_s_own(tmp_path):
 def test_a_blob_is_named_the_way_the_hub_names_it(tmp_path):
     """An LFS file by its published sha256, everything else by its git blob
     hash, or the hub's own tools fetch it again."""
+
     path = tmp_path / "small.json"
     path.write_bytes(b"hello")
 
@@ -424,8 +466,10 @@ def test_a_blob_is_named_the_way_the_hub_names_it(tmp_path):
 def test_a_downloaded_file_is_a_link_into_blobs(monkeypatch, server, tmp_path):
     """The bytes live once, under their hash, and the snapshot points at
     them. Relatively, so moving the cache does not break every link."""
+
     payload_sha = hashlib.sha256(PAYLOAD).hexdigest()
     files = [RemoteFile("model.bin", len(PAYLOAD), payload_sha)]
+
     _serve_locally(monkeypatch, server)
 
     dest = download_repo(
@@ -452,6 +496,7 @@ def test_a_downloaded_file_is_a_link_into_blobs(monkeypatch, server, tmp_path):
 def test_sha256_of_matches_hashlib(tmp_path):
     path = Path(tmp_path / "blob")
     path.write_bytes(PAYLOAD)
+
     assert sha256_of(path, block_size=1024) == hashlib.sha256(PAYLOAD).hexdigest()
 
 
@@ -466,8 +511,11 @@ def _write_runnable_checkpoint(directory: Path) -> None:
     from safetensors.numpy import save_file
 
     directory.mkdir(parents=True, exist_ok=True)
+
     (directory / "config.json").write_text('{"model_type": "fake"}')
+
     (directory / "tokenizer.json").write_text("{}")
+
     save_file(
         {"a": np.zeros(8, dtype=np.float32)}, str(directory / "model.safetensors")
     )
@@ -482,28 +530,37 @@ def _exploding_repo_files(*args, **kwargs):
 def _cached_snapshot(repo_id: str, root) -> "Path":
     """A repo already in the cache: a snapshot with `refs/main` pointing at
     it, which is what `is_complete` has to look through."""
+
     repo = repo_dir(repo_id, root)
     snapshot = repo / "snapshots" / COMMIT
     snapshot.mkdir(parents=True)
+
     (repo / "refs").mkdir(parents=True, exist_ok=True)
+
     (repo / "refs" / "main").write_text(COMMIT)
+
     return snapshot
 
 
 def test_a_complete_checkpoint_never_asks_the_hub(tmp_path, monkeypatch):
     _write_runnable_checkpoint(_cached_snapshot("org/model", tmp_path))
+
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
     )
+
     assert is_complete("org/model", root=tmp_path) is True
 
 
 def test_a_truncated_shard_falls_back_to_the_hub(tmp_path, monkeypatch):
     """Local bytes say "not all here", and only the hub can say whether
     that's the whole story -- so this is where the network call belongs."""
+
     directory = _cached_snapshot("org/model", tmp_path)
     _write_runnable_checkpoint(directory)
+
     shard = directory / "model.safetensors"
+
     with shard.open("r+b") as f:
         f.truncate(shard.stat().st_size - 4)
 
@@ -514,6 +571,7 @@ def test_a_truncated_shard_falls_back_to_the_hub(tmp_path, monkeypatch):
         return [RemoteFile("model.safetensors", shard.stat().st_size, None)]
 
     monkeypatch.setattr("mlx_lean_moe.weights.download.repo_files", fake_repo_files)
+
     # The hub is consulted, and agrees the file is the size it now is --
     # this pins that the fallback path is reached, not its verdict.
     assert is_complete("org/model", root=tmp_path) is True
@@ -523,25 +581,34 @@ def test_a_truncated_shard_falls_back_to_the_hub(tmp_path, monkeypatch):
 def test_missing_tokenizer_is_incomplete_even_with_whole_shards(tmp_path, monkeypatch):
     """Complete weights do not imply a runnable directory, however the
     directory was assembled."""
+
     directory = _cached_snapshot("org/model", tmp_path)
     _write_runnable_checkpoint(directory)
+
     (directory / "tokenizer.json").unlink()
+
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
     )
+
     assert is_complete("org/model", root=tmp_path) is False
 
 
 def test_leftover_parts_mean_a_download_stopped_partway(tmp_path, monkeypatch):
     """Shards can be whole while a later file is still mid-flight."""
+
     directory = _cached_snapshot("org/model", tmp_path)
     _write_runnable_checkpoint(directory)
+
     parts = repo_dir("org/model", tmp_path) / ".parts"
     parts.mkdir()
+
     (parts / "tokenizer.json.0000").write_bytes(b"partial")
+
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
     )
+
     assert is_complete("org/model", root=tmp_path) is False
 
 
@@ -549,12 +616,14 @@ def test_a_directory_that_was_never_downloaded_is_incomplete(tmp_path, monkeypat
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
     )
+
     assert is_complete("org/nothing", root=tmp_path) is False
 
 
 def test_a_rate_limited_range_waits_before_retrying(tmp_path, monkeypatch):
     """429 means "not now", not "no"; retrying at once with every range in
     flight spends the attempt budget in seconds."""
+
     slept: list[float] = []
     monkeypatch.setattr("mlx_lean_moe.weights.download.time.sleep", slept.append)
 
@@ -602,6 +671,7 @@ def test_backoff_grows_when_the_server_names_no_delay(tmp_path, monkeypatch):
 def test_an_ordinary_failure_is_retried_without_waiting(tmp_path, monkeypatch):
     """A dropped connection is not a refusal: whatever landed is a valid
     prefix and the next pass resumes from it, so waiting only wastes time."""
+
     slept: list[float] = []
     monkeypatch.setattr("mlx_lean_moe.weights.download.time.sleep", slept.append)
 

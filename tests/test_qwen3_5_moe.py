@@ -45,6 +45,7 @@ LINEAR = LinearParams(
 
 def _config() -> Qwen3_5Config:
     quant = QuantScheme(bits=BITS, group_size=GROUP_SIZE)
+
     return Qwen3_5Config(
         num_layers=1,
         hidden_size=HIDDEN,
@@ -74,6 +75,7 @@ def _quantize(dense: mx.array):
     effective = mx.dequantize(
         w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
     )
+
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -85,36 +87,45 @@ def _random(rng, *shape) -> mx.array:
 def moe_pair(tmp_path):
     """This project's MoE pieces and the reference block from the same
     weights, the routed experts written to a stacked checkpoint."""
+
     rng = np.random.default_rng(0)
     config = _config()
 
     router_t, router_dense = _quantize(_random(rng, NUM_EXPERTS, HIDDEN))
     shared = {}
     shared_dense = {}
+
     for name, out_dim, in_dim in (
         ("gate_proj", SHARED_INTER, HIDDEN),
         ("up_proj", SHARED_INTER, HIDDEN),
         ("down_proj", HIDDEN, SHARED_INTER),
     ):
         shared[name], shared_dense[name] = _quantize(_random(rng, out_dim, in_dim))
+
     shared_gate_t, shared_gate_dense = _quantize(_random(rng, 1, HIDDEN))
 
     # One stacked (num_experts, out, in) tensor per projection, quantized
     # per expert then stacked, as a real checkpoint stores them.
     stacked_files: dict[str, np.ndarray] = {}
     expert_dense: dict[str, list[mx.array]] = {}
+
     for name, out_dim, in_dim in (
         ("gate_proj", MOE_INTER, HIDDEN),
         ("up_proj", MOE_INTER, HIDDEN),
         ("down_proj", HIDDEN, MOE_INTER),
     ):
         packed, scales, biases, dense = [], [], [], []
+
         for _ in range(NUM_EXPERTS):
             tensors, effective = _quantize(_random(rng, out_dim, in_dim))
             packed.append(np.array(tensors["weight"]))
+
             scales.append(np.array(tensors["scales"]))
+
             biases.append(np.array(tensors["biases"]))
+
             dense.append(effective)
+
         base = f"{PREFIX}.layers.0.mlp.switch_mlp.{name}"
         stacked_files[f"{base}.weight"] = np.stack(packed)
         stacked_files[f"{base}.scales"] = np.stack(scales)
@@ -122,6 +133,7 @@ def moe_pair(tmp_path):
         expert_dense[name] = dense
 
     save_file(stacked_files, str(tmp_path / "model.safetensors"))
+
     index = build_index(tmp_path, use_cache=False)
     streamer = StackedExpertStreamer(
         tmp_path,
@@ -159,6 +171,7 @@ def moe_pair(tmp_path):
     ref.switch_mlp.down_proj.weight = mx.stack(expert_dense["down_proj"])
 
     yield config, ours, ref
+
     streamer.close()
 
 
@@ -174,6 +187,7 @@ def test_moe_block_matches_mlx_lm_reference(moe_pair):
     expected = ref(x[None, None])[0, 0]
 
     mx.eval(got, expected)
+
     assert mx.allclose(got, expected, rtol=1e-3, atol=1e-4).item()
 
 
@@ -189,10 +203,13 @@ def test_router_selects_the_same_experts_as_the_reference(moe_pair):
     ref_scores = ref_scores / ref_scores.sum(axis=-1, keepdims=True)
 
     mx.eval(indices, scores, ref_inds, ref_scores)
+
     assert set(indices.tolist()) == set(ref_inds[0].tolist())
+
     # Scores are order-dependent, so compare them keyed by expert id.
     ours_by_id = dict(zip(indices.tolist(), scores.tolist()))
     ref_by_id = dict(zip(ref_inds[0].tolist(), ref_scores[0].tolist()))
+
     for expert_id, score in ours_by_id.items():
         assert abs(score - ref_by_id[expert_id]) < 1e-4
 
@@ -200,6 +217,7 @@ def test_router_selects_the_same_experts_as_the_reference(moe_pair):
 def test_norm_topk_prob_changes_the_scores(moe_pair):
     """Confirms the flag is actually wired: with it on the selected scores
     sum to 1, with it off they keep their share of the full softmax."""
+
     config, ours, _ = moe_pair
     rng = np.random.default_rng(302)
     x = mx.array(rng.standard_normal(HIDDEN).astype(np.float32))
@@ -220,6 +238,7 @@ def test_norm_topk_prob_changes_the_scores(moe_pair):
     _, raw = unnormalized_router(x)
 
     mx.eval(normalized, raw)
+
     assert abs(float(normalized.sum().item()) - 1.0) < 1e-5
     assert float(raw.sum().item()) < 1.0 - 1e-4
 
@@ -227,6 +246,7 @@ def test_norm_topk_prob_changes_the_scores(moe_pair):
 def test_shared_expert_is_gated(moe_pair):
     """The shared expert's contribution is scaled by sigmoid of its own
     gate, so it is never simply the raw MLP output."""
+
     config, ours, _ = moe_pair
     rng = np.random.default_rng(303)
     x = mx.array(rng.standard_normal(HIDDEN).astype(np.float32))
@@ -235,12 +255,14 @@ def test_shared_expert_is_gated(moe_pair):
     ungated = swiglu_mlp(x, ours["shared"].projections, config.other_quant)
 
     mx.eval(gated, ungated)
+
     assert not mx.allclose(gated, ungated, atol=1e-4).item()
 
 
 def test_router_order_only_matters_without_norm_topk_prob():
     """Softmax-over-all-then-select and select-then-softmax are identical
     with ``norm_topk_prob`` set, and differ only without it."""
+
     rng = np.random.default_rng(7)
     logits = mx.array(rng.standard_normal((1, 256)).astype(np.float32) * 2)
     k = 8
@@ -271,6 +293,7 @@ def test_router_order_only_matters_without_norm_topk_prob():
 def test_batched_experts_match_computing_each_position_alone(moe_pair):
     """A wrong inverse permutation still gives every position exactly `k`
     contributions of the right magnitude, just from the wrong experts."""
+
     _, ours, _ = moe_pair
     rng = np.random.default_rng(400)
     x = mx.array(rng.standard_normal((6, HIDDEN)).astype(np.float32))
@@ -290,6 +313,7 @@ def test_batched_experts_match_computing_each_position_alone(moe_pair):
 def test_batched_experts_route_each_position_to_its_own_experts(moe_pair):
     """Every position is forced through one expert of its own, so a
     symmetric permutation error cannot hide."""
+
     _, ours, _ = moe_pair
     rng = np.random.default_rng(401)
     positions = 4
@@ -299,6 +323,7 @@ def test_batched_experts_route_each_position_to_its_own_experts(moe_pair):
     weights = mx.ones((positions, 1))
 
     batched = ours["experts"](x, indices, weights)
+
     for t in range(positions):
         alone = ours["experts"](x[t], indices[t], weights[t])
         assert mx.allclose(batched[t], alone, atol=1e-6), (

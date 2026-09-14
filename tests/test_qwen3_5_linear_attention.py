@@ -31,6 +31,7 @@ LINEAR = LinearParams(
 
 def _config() -> Qwen3_5Config:
     quant = QuantScheme(bits=BITS, group_size=GROUP_SIZE)
+
     return Qwen3_5Config(
         num_layers=1,
         hidden_size=HIDDEN,
@@ -58,11 +59,13 @@ def _config() -> Qwen3_5Config:
 def _quantized(rng, out_dim: int, in_dim: int):
     """A random weight, quantized: both this project's {weight,scales,biases}
     and the dequantized dense matrix the reference gets."""
+
     dense = mx.array(rng.standard_normal((out_dim, in_dim)).astype(np.float32) * 0.05)
     w, scales, biases = mx.quantize(dense, group_size=GROUP_SIZE, bits=BITS)
     effective = mx.dequantize(
         w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
     )
+
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -124,6 +127,7 @@ def _build_pair(seed: int):
     ref.A_log = A_log
     ref.dt_bias = dt_bias
     ref.norm.weight = norm_weight
+
     return config, ours, ref
 
 
@@ -147,12 +151,14 @@ def test_matches_mlx_lm_gated_delta_net(seq_len):
     expected = ref(x[None], mask=None, cache=None)[0]
 
     mx.eval(got, expected)
+
     assert mx.allclose(got, expected, rtol=1e-4, atol=1e-4).item()
 
 
 def test_decoding_step_by_step_matches_one_batched_pass():
     """Both halves of the state, the convolution's tail and the SSM matrix,
     have to carry across calls exactly."""
+
     config, ours, _ = _build_pair(seed=1)
     rng = np.random.default_rng(101)
     x = mx.array(rng.standard_normal((5, HIDDEN)).astype(np.float32))
@@ -163,21 +169,26 @@ def test_decoding_step_by_step_matches_one_batched_pass():
     stepwise = mx.stack([ours(x[t], cache) for t in range(x.shape[0])])
 
     mx.eval(batched, stepwise)
+
     assert mx.allclose(batched, stepwise, rtol=1e-4, atol=1e-5).item()
 
 
 def test_cache_state_is_constant_in_sequence_length():
     """The whole point of these layers: feeding more tokens must not grow
     the state one byte."""
+
     config, ours, _ = _build_pair(seed=2)
     rng = np.random.default_rng(102)
     cache = _fresh_cache(config)
     shapes = []
+
     for chunk in range(4):
         x = mx.array(rng.standard_normal((3, HIDDEN)).astype(np.float32))
         ours(x, cache)
+
         conv_state, ssm_state = cache.state()
         mx.eval(conv_state, ssm_state)
+
         shapes.append((conv_state.shape, ssm_state.shape))
 
     assert len(set(shapes)) == 1

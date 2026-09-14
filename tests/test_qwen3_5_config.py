@@ -94,6 +94,7 @@ def test_qwen3_5_marks_three_in_four_layers_as_linear():
 def test_qwen3_5_derives_layer_types_when_not_published():
     text = dict(QWEN3_5_TEXT_CONFIG)
     del text["layer_types"]
+
     config = model_config_from_hf(
         {
             "model_type": "qwen3_5_moe",
@@ -158,6 +159,7 @@ def test_qwen3_5_resolves_exact_mixed_quantization_per_projection():
             },
         }
     )
+
     config = model_config_from_hf(
         {
             "model_type": "qwen3_5_moe",
@@ -181,6 +183,7 @@ def test_qwen3_5_resolves_exact_mixed_quantization_per_projection():
 def test_qwen3_5_norm_topk_prob_defaults_to_true_when_absent():
     """The reference implementation's own default, and it changes the routed
     scores."""
+
     config = model_config_from_hf(QWEN3_5_CONFIG)
     assert config.norm_topk_prob is True
 
@@ -188,6 +191,7 @@ def test_qwen3_5_norm_topk_prob_defaults_to_true_when_absent():
 def test_qwen3_5_ignores_a_multi_token_prediction_head():
     """The head sits outside the num_hidden_layers stack and plain
     generation never runs it, so it must not read as unsupported."""
+
     text = dict(QWEN3_5_TEXT_CONFIG)
     text["mtp_num_hidden_layers"] = 1
     config = model_config_from_hf(
@@ -210,6 +214,7 @@ def test_qwen3_5_ignores_a_multi_token_prediction_head():
 def test_qwen3_5_rejects_unimplemented_mechanisms(field, value, message):
     text = dict(QWEN3_5_TEXT_CONFIG)
     text[field] = value
+
     with pytest.raises(ValueError, match=message):
         model_config_from_hf(
             {

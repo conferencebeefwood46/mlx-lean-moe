@@ -19,6 +19,7 @@ def _inputs(length, key_dim=128, value_dim=17, key_heads=2, value_heads=4):
     g[:, 0] = 1
     beta = rng.uniform(0, 1, size=g.shape)
     state = rng.normal(size=(value_heads, value_dim, key_dim)) * 0.1
+
     return [mx.array(a.astype(np.float32)) for a in (q, k, v, g, beta, state)]
 
 
@@ -27,12 +28,14 @@ def _reference(inputs):
     repeat = v.shape[1] // q.shape[1]
     q, k = np.repeat(q, repeat, axis=1), np.repeat(k, repeat, axis=1)
     output = []
+
     for t in range(len(q)):
         state *= g[t, :, None, None]
         read = np.einsum("hvk,hk->hv", state, k[t])
         correction = (v[t] - read) * beta[t, :, None]
         state += np.einsum("hv,hk->hvk", correction, k[t])
         output.append(np.einsum("hvk,hk->hv", state, q[t]))
+
     return np.stack(output), state
 
 
@@ -47,6 +50,7 @@ def test_kernel_matches_float64_reference_and_preserves_input_state(
     inputs = _inputs(*shape)
     if strided:
         inputs = [mx.stack([a, a], axis=-1)[..., 0] for a in inputs]
+
     expected_y, expected_state = _reference(inputs)
     initial_state = np.array(inputs[-1]).copy()
 
@@ -54,11 +58,16 @@ def test_kernel_matches_float64_reference_and_preserves_input_state(
         pytest.fail("supported float32 GPU inputs must use the Metal kernel")
 
     monkeypatch.setattr(delta, "_gated_delta_scan_ops", unexpected_fallback)
+
     y, state = delta.gated_delta_scan(*inputs)
     mx.eval(y, state)
+
     assert y.dtype == state.dtype == mx.float32
+
     np.testing.assert_allclose(np.array(y), expected_y, rtol=2e-5, atol=2e-6)
+
     np.testing.assert_allclose(np.array(state), expected_state, rtol=2e-5, atol=2e-6)
+
     np.testing.assert_array_equal(np.array(inputs[-1]), initial_state)
 
 
@@ -70,14 +79,19 @@ def test_long_scan_and_prefill_then_decode_preserve_carried_state():
     outputs = []
     # Uneven prefill chunks, then 128 single-token decode steps.
     bounds = [0, 1, 128, 383, 1024, 1920, *range(1921, 2049)]
+
     for start, end in zip(bounds, bounds[1:]):
         y, state = delta.gated_delta_scan(*(a[start:end] for a in inputs[:-1]), state)
         mx.eval(y, state)
+
         outputs.append(y)
+
     split_y = mx.concatenate(outputs)
     mx.eval(whole_y, whole_state, split_y)
+
     for actual in (whole_y, split_y):
         np.testing.assert_allclose(np.array(actual), expected_y, rtol=2e-5, atol=2e-6)
+
     for actual in (whole_state, state):
         np.testing.assert_allclose(
             np.array(actual), expected_state, rtol=2e-5, atol=2e-6
@@ -99,15 +113,20 @@ def test_fallback_preserves_previous_dtype_and_results(case, monkeypatch):
         pytest.fail(f"{case} must use the ops fallback")
 
     monkeypatch.setattr(delta, "gated_delta_scan_metal", unexpected_kernel)
+
     if case == "no_metal":
         monkeypatch.setattr(mx.metal, "is_available", lambda: False)
+
     device = mx.default_device()
+
     try:
         if case == "cpu":
             mx.set_default_device(mx.cpu)
+
         actual = delta.gated_delta_scan(*inputs, use_kernel=case != "disabled")
         expected = delta.gated_delta_scan(*inputs, use_kernel=False)
         mx.eval(actual, expected)
+
         for got, want in zip(actual, expected):
             assert got.dtype == want.dtype
             assert mx.array_equal(got, want).item()
@@ -119,6 +138,7 @@ def test_fallback_preserves_previous_dtype_and_results(case, monkeypatch):
 def test_invalid_shapes_are_rejected_before_kernel_dispatch(invalid, monkeypatch):
     inputs = _inputs(5)
     index = {"k": 1, "v": 2, "g": 3, "beta": 4, "state": 5}
+
     if invalid in index:
         inputs[index[invalid]] = inputs[index[invalid]][:1]
     elif invalid == "heads":
@@ -131,5 +151,6 @@ def test_invalid_shapes_are_rejected_before_kernel_dispatch(invalid, monkeypatch
         pytest.fail("invalid shapes reached Metal")
 
     monkeypatch.setattr(delta, "gated_delta_scan_metal", unexpected_kernel)
+
     with pytest.raises(ValueError):
         delta.gated_delta_scan(*inputs)

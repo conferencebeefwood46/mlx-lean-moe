@@ -69,9 +69,11 @@ class Qwen3_5Config:
 
     def quant_for(self, name: str, fallback: QuantScheme | None = None) -> QuantScheme:
         """Resolve one projection's exact mixed-precision override."""
+
         for tensor_name, scheme in self.quant_overrides:
             if tensor_name == name:
                 return scheme
+
         return fallback or self.other_quant
 
 
@@ -101,12 +103,14 @@ def _quant_overrides(
                     ),
                 )
             )
+
     return tuple(overrides)
 
 
 def _quant_override(quant: dict, name_suffix: str, default: QuantScheme) -> QuantScheme:
     """Per-tensor-name overrides: every layer publishes its own identical
     entry, so the first match is representative."""
+
     for name, override in quant.items():
         if isinstance(override, dict) and name.endswith(name_suffix):
             return QuantScheme(
@@ -114,6 +118,7 @@ def _quant_override(quant: dict, name_suffix: str, default: QuantScheme) -> Quan
                 group_size=int(override.get("group_size", default.group_size)),
                 mode=str(override.get("mode", default.mode)),
             )
+
     return default
 
 
@@ -121,9 +126,11 @@ def _layer_types(text: dict, num_layers: int) -> list[str]:
     layer_types = text.get("layer_types")
     if layer_types is not None:
         return list(layer_types)
+
     # Fallback matching the reference implementation's own rule: a layer is
     # linear unless it's the last of each `full_attention_interval` group.
     interval = int(text.get("full_attention_interval", 4))
+
     return [
         "full_attention" if (i + 1) % interval == 0 else "linear_attention"
         for i in range(num_layers)
@@ -140,10 +147,12 @@ def from_hf_config(hf_config: dict) -> Qwen3_5Config:
         raise ValueError(
             f"qwen3_5 config has mlp_only_layers={text['mlp_only_layers']!r}, but dense-only layers aren't implemented"
         )
+
     if int(text.get("decoder_sparse_step", 1)) != 1:
         raise ValueError(
             f"qwen3_5 config has decoder_sparse_step={text['decoder_sparse_step']!r}; only every-layer MoE (1) is implemented"
         )
+
     if not int(text.get("num_experts", 0)):
         raise ValueError(
             "qwen3_5 config has no experts -- this is a dense checkpoint, out of scope for this project"

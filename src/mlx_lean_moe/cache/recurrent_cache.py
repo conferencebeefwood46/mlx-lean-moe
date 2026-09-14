@@ -23,6 +23,7 @@ class RecurrentCache:
     ) -> None:
         if conv_kernel_dim < 1:
             raise ValueError(f"conv_kernel_dim must be positive, got {conv_kernel_dim}")
+
         self.conv_state = mx.zeros((conv_kernel_dim - 1, conv_dim), dtype=dtype)
         # float32 whatever the checkpoint's dtype, as the reference does via
         # `mamba_ssm_dtype`: this accumulates over the whole sequence.

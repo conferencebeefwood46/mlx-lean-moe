@@ -24,7 +24,9 @@ class QuantScheme:
         }
         if self.mode not in supported:
             raise ValueError(f"unsupported quantization mode {self.mode!r}")
+
         bits, groups = supported[self.mode]
+
         if self.bits not in bits or self.group_size not in groups:
             raise ValueError(
                 f"unsupported {self.mode} quantization with bits={self.bits}, group_size={self.group_size}"
@@ -54,6 +56,7 @@ def register_architecture(
 ) -> None:
     """Register one architecture family. ``model_cls`` is looked up by the
     type of the parsed config, the only thing a later caller holds."""
+
     _ADAPTERS[model_type] = adapter
     _MODEL_CLASSES[config_cls] = model_cls
 
@@ -61,6 +64,7 @@ def register_architecture(
 def model_config_from_hf(hf_config: dict) -> Any:
     """Build a family-specific config dataclass from a parsed HF
     ``config.json``, dispatching on its ``model_type``."""
+
     model_type = hf_config.get("model_type")
     adapter = _ADAPTERS.get(model_type)
     if adapter is None:
@@ -68,15 +72,18 @@ def model_config_from_hf(hf_config: dict) -> Any:
         raise ValueError(
             f"no config adapter for model_type={model_type!r}; known: {known}"
         )
+
     return adapter(hf_config)
 
 
 def model_class_for(config: Any) -> Callable[..., GenerativeModel]:
     """The model class that implements ``config``'s architecture, looked up
     by its concrete type."""
+
     model_cls = _MODEL_CLASSES.get(type(config))
     if model_cls is None:
         raise ValueError(
             f"no model class registered for config type {type(config).__name__}"
         )
+
     return model_cls

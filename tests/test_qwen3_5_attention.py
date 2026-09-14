@@ -36,6 +36,7 @@ LINEAR = LinearParams(
 
 def _config() -> Qwen3_5Config:
     quant = QuantScheme(bits=BITS, group_size=GROUP_SIZE)
+
     return Qwen3_5Config(
         num_layers=1,
         hidden_size=HIDDEN,
@@ -66,6 +67,7 @@ def _quantized(rng, out_dim: int, in_dim: int):
     effective = mx.dequantize(
         w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
     )
+
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -112,6 +114,7 @@ def _build_pair(seed: int):
     ref.o_proj.weight = o_dense
     ref.q_norm.weight = q_norm
     ref.k_norm.weight = k_norm
+
     return config, ours, ref
 
 
@@ -131,6 +134,7 @@ def test_matches_mlx_lm_attention(seq_len):
     expected = ref(x[None], mask=mask, cache=ref_cache)[0]
 
     mx.eval(got, expected)
+
     assert mx.allclose(got, expected, rtol=1e-4, atol=1e-4).item()
 
 
@@ -151,12 +155,14 @@ def test_decode_steps_match_a_batched_prefill():
     stepwise = mx.stack([ours(x[t], cache) for t in range(x.shape[0])])
 
     mx.eval(batched, stepwise)
+
     assert mx.allclose(batched, stepwise, rtol=1e-3, atol=1e-4).item()
 
 
 def test_output_gate_actually_gates():
     """The second half of q_proj is a gate, not more queries: zeroing it
     must halve the output (sigmoid(0) = 0.5), not merely perturb it."""
+
     config, ours, _ = _build_pair(seed=2)
     rng = np.random.default_rng(202)
     x = mx.array(rng.standard_normal((1, HIDDEN)).astype(np.float32))
@@ -188,4 +194,5 @@ def test_output_gate_actually_gates():
     )
 
     mx.eval(gated, ungated)
+
     assert not mx.allclose(gated, ungated, atol=1e-3).item()

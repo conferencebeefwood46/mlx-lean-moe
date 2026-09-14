@@ -40,7 +40,9 @@ IS_LINEAR = (True, True, True, False)
 def _quantized(rng, out_dim: int, in_dim: int) -> dict[str, np.ndarray]:
     """Packed-4-bit-affine {weight,scales,biases} with F32 scales; the BF16
     real checkpoints use is covered by test_expert_loader.py."""
+
     groups, packed = in_dim // GROUP_SIZE, in_dim // 8
+
     return {
         "weight": rng.integers(0, 2**32, size=(out_dim, packed), dtype=np.uint32),
         "scales": (rng.random((out_dim, groups)).astype(np.float32) * 0.05),
@@ -67,8 +69,10 @@ def _write_layer(tensors: dict, rng, layer: int, is_linear: bool) -> None:
         ):
             for field, arr in _quantized(rng, out_dim, HIDDEN).items():
                 tensors[f"{attn}.{name}.{field}"] = arr
+
         for field, arr in _quantized(rng, HIDDEN, LINEAR.value_dim).items():
             tensors[f"{attn}.out_proj.{field}"] = arr
+
         tensors[f"{attn}.conv1d.weight"] = (
             rng.standard_normal((LINEAR.conv_dim, LINEAR.conv_kernel_dim, 1)) * 0.2
         ).astype(np.float32)
@@ -93,14 +97,17 @@ def _write_layer(tensors: dict, rng, layer: int, is_linear: bool) -> None:
         ):
             for field, arr in _quantized(rng, out_dim, in_dim).items():
                 tensors[f"{attn}.{name}.{field}"] = arr
+
         tensors[f"{attn}.q_norm.weight"] = _plain(rng, HEAD_DIM)
         tensors[f"{attn}.k_norm.weight"] = _plain(rng, HEAD_DIM)
 
     mlp = f"{prefix}.mlp"
     for field, arr in _quantized(rng, NUM_EXPERTS, HIDDEN).items():
         tensors[f"{mlp}.gate.{field}"] = arr
+
     for field, arr in _quantized(rng, 1, HIDDEN).items():
         tensors[f"{mlp}.shared_expert_gate.{field}"] = arr
+
     for name, out_dim, in_dim in (
         ("gate_proj", SHARED_INTER, HIDDEN),
         ("up_proj", SHARED_INTER, HIDDEN),
@@ -117,6 +124,7 @@ def _write_layer(tensors: dict, rng, layer: int, is_linear: bool) -> None:
     ):
         stacked = _quantized(rng, out_dim * NUM_EXPERTS, in_dim)
         groups, packed = in_dim // GROUP_SIZE, in_dim // 8
+
         for field, shape in (
             ("weight", (NUM_EXPERTS, out_dim, packed)),
             ("scales", (NUM_EXPERTS, out_dim, groups)),
@@ -129,12 +137,16 @@ def _write_layer(tensors: dict, rng, layer: int, is_linear: bool) -> None:
 def synthetic_qwen3_5(tmp_path):
     rng = np.random.default_rng(0)
     tensors: dict[str, np.ndarray] = {}
+
     for layer, is_linear in enumerate(IS_LINEAR):
         _write_layer(tensors, rng, layer, is_linear)
+
     for field, arr in _quantized(rng, VOCAB, HIDDEN).items():
         tensors[f"{PREFIX}.embed_tokens.{field}"] = arr
+
     for field, arr in _quantized(rng, VOCAB, HIDDEN).items():
         tensors[f"language_model.lm_head.{field}"] = arr
+
     tensors[f"{PREFIX}.norm.weight"] = _plain(rng, HIDDEN)
     save_file(tensors, str(tmp_path / "model.safetensors"))
 
@@ -161,6 +173,7 @@ def synthetic_qwen3_5(tmp_path):
         shared_gate_quant=quant,
         other_quant=quant,
     )
+
     return tmp_path, config
 
 
@@ -169,14 +182,17 @@ def test_transformer_loads_and_decodes(synthetic_qwen3_5):
 
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=16)
+
     try:
         logits = model.prefill([1, 2, 3])
         mx.eval(logits)
+
         assert logits.shape == (VOCAB,)
         assert not bool(mx.any(mx.isnan(logits)).item())
 
         step = model(int(mx.argmax(logits).item()))
         mx.eval(step)
+
         assert step.shape == (VOCAB,)
         assert not bool(mx.any(mx.isnan(step)).item())
     finally:
@@ -201,6 +217,7 @@ def test_transformer_prefills_and_decodes_a_mixed_checkpoint(synthetic_qwen3_5):
     del tensors[f"{dense_name}.biases"]
 
     overrides = []
+
     for projection, bits in (("gate_proj", 3), ("up_proj", 6)):
         name = f"{PREFIX}.layers.0.mlp.switch_mlp.{projection}"
         out_dim = MOE_INTER
@@ -219,12 +236,15 @@ def test_transformer_prefills_and_decodes_a_mixed_checkpoint(synthetic_qwen3_5):
         overrides.append((name, QuantScheme(bits=bits, group_size=32)))
 
     save_file(tensors, str(checkpoint))
+
     mixed_config = replace(config, quant_overrides=tuple(overrides))
     model = Qwen3_5Transformer(model_dir, mixed_config, max_context=16)
+
     try:
         logits = model.prefill([1, 2, 3])
         step = model(int(mx.argmax(logits).item()))
         mx.eval(logits, step)
+
         assert logits.shape == step.shape == (VOCAB,)
         assert not bool(mx.any(mx.isnan(logits)).item())
         assert not bool(mx.any(mx.isnan(step)).item())
@@ -238,6 +258,7 @@ def test_transformer_prefills_and_decodes_a_mixed_checkpoint(synthetic_qwen3_5):
 def test_layers_get_the_cache_kind_their_attention_needs(synthetic_qwen3_5):
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=16)
+
     try:
         kinds = [type(c) for c in model.cache]
         assert kinds == [RecurrentCache, RecurrentCache, RecurrentCache, GrowingKVCache]
@@ -252,19 +273,24 @@ def test_linear_layer_state_does_not_grow_with_context(synthetic_qwen3_5):
 
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=32)
+
     try:
         before = [
             c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)
         ]
         logits = model.prefill([1, 2, 3, 4, 5])
+
         for _ in range(4):
             logits = model(int(mx.argmax(logits).item()))
+
         mx.eval(logits)
+
         after = [
             c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)
         ]
 
         assert before == after
+
         # The KV layer, by contrast, really did accumulate all 9 positions.
         kv = [c for c in model.cache if isinstance(c, GrowingKVCache)][0]
         assert kv.size == 9
@@ -282,15 +308,20 @@ def test_prefill_then_decode_matches_decoding_every_token(synthetic_qwen3_5):
 
     batched = Qwen3_5Transformer(model_dir, config, max_context=16)
     stepwise = Qwen3_5Transformer(model_dir, config, max_context=16)
+
     try:
         from_prefill = batched.prefill(tokens)
+
         for t in tokens[:-1]:
             stepwise(t)
+
         from_steps = stepwise(tokens[-1])
         mx.eval(from_prefill, from_steps)
+
         assert mx.allclose(from_prefill, from_steps, rtol=1e-3, atol=1e-4).item()
     finally:
         batched.close()
+
         stepwise.close()
 
 
@@ -299,6 +330,7 @@ def test_decoder_layer_rejects_3d_input(synthetic_qwen3_5):
 
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=16)
+
     try:
         with pytest.raises(ValueError):
             model.layers[0](mx.zeros((2, 3, HIDDEN)), model.cache[0])
@@ -314,20 +346,29 @@ def test_chunked_prefill_preserves_logits_and_both_cache_states(
 
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=32, prefill_chunk_size=32)
+
     try:
         tokens = [1, 2, 3, 4, 5, 6, 7, 8]
+
         model.prefill([9, 10])  # check causal masking with an existing prefix
+
         expected = model.prefill(tokens)
         expected_states = [c.state() for c in model.cache]
         mx.eval(expected, expected_states)
+
         model.reset_cache()
+
         model.prefill_chunk_size = chunk_size
         model.prefill([9, 10])
+
         actual = model.prefill(tokens)
         mx.eval(actual)
+
         assert mx.allclose(actual, expected, rtol=1e-3, atol=1e-4).item()
+
         for cache, state in zip(model.cache, expected_states):
             assert cache.size == 10
+
             for got, want in zip(cache.state(), state):
                 assert mx.allclose(got, want, rtol=1e-3, atol=1e-4).item()
     finally:
@@ -339,15 +380,22 @@ def test_context_overflow_is_rejected_before_any_layer_changes(synthetic_qwen3_5
 
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=3, prefill_chunk_size=2)
+
     try:
         mx.eval(model.prefill([1, 2]))
+
         with pytest.raises(IndexError):
             model.prefill([3, 4])
+
         assert all(c.size == 2 for c in model.cache)
+
         mx.eval(model(3))
+
         with pytest.raises(IndexError):
             model(4)
+
         assert all(c.size == 3 for c in model.cache)
+
         with pytest.raises(ValueError):
             model.prefill([])
     finally:
@@ -357,8 +405,10 @@ def test_context_overflow_is_rejected_before_any_layer_changes(synthetic_qwen3_5
 def test_the_default_expert_cache_is_one_slot_per_routed_expert(synthetic_qwen3_5):
     """Measured: on an 8 GB M1 a larger cache bought no throughput and cost
     memory, so the default holds exactly the experts one token routes to."""
+
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=16)
+
     try:
         assert {loader._max_size for loader in model.expert_loaders} == {TOP_K}
     finally:
@@ -370,6 +420,7 @@ def test_an_explicit_expert_cache_overrides_the_default(synthetic_qwen3_5):
     model = Qwen3_5Transformer(
         model_dir, config, max_context=16, expert_cache_size_per_layer=TOP_K + 3
     )
+
     try:
         assert {loader._max_size for loader in model.expert_loaders} == {TOP_K + 3}
     finally:

@@ -98,10 +98,12 @@ class Qwen3_5DecoderLayer:
     def __call__(self, x: mx.array, cache) -> mx.array:
         """``x``: ``(hidden_size,)`` for a decode step, or
         ``(L, hidden_size)`` for a batched prefill."""
+
         if x.ndim not in (1, 2):
             raise ValueError(
                 f"Qwen3_5DecoderLayer expects 1-D or 2-D x, got shape {x.shape}"
             )
+
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
 
@@ -118,6 +120,7 @@ class Qwen3_5DecoderLayer:
             normed, indices, weights, before_load=lambda: mx.async_eval(shared)
         )
         out = h + routed + shared
+
         return out[0] if squeeze else out
 
 
@@ -136,8 +139,10 @@ class Qwen3_5Transformer:
     ) -> None:
         if max_context <= 0:
             raise ValueError("max_context must be positive")
+
         if prefill_chunk_size <= 0:
             raise ValueError("prefill_chunk_size must be positive")
+
         self.config = config
         self.prefill_chunk_size = prefill_chunk_size
         self.model_dir = Path(model_dir)
@@ -155,6 +160,7 @@ class Qwen3_5Transformer:
             raise ValueError(
                 f"expert pack holds {layout.num_experts} experts, checkpoint has {config.num_experts}"
             )
+
         self.stacked_streamer = (
             expert_pack.ExpertPackStreamer(self.model_dir, layout)
             if layout is not None
@@ -166,6 +172,7 @@ class Qwen3_5Transformer:
                 stack_name="mlp.switch_mlp",
             )
         )
+
         for layer_index in range(config.num_layers):
             prefix = f"{config.tensor_prefix}.layers.{layer_index}.mlp.switch_mlp"
             for projection in ("gate_proj", "up_proj", "down_proj"):
@@ -173,6 +180,7 @@ class Qwen3_5Transformer:
                 validate_linear_layout(
                     index, name, config.quant_for(name, config.expert_quant)
                 )
+
         cache_size = expert_cache_size_per_layer or config.experts_per_token
         self.expert_loaders = [
             CachedExpertLoader(
@@ -209,6 +217,7 @@ class Qwen3_5Transformer:
     def _new_cache(self) -> list:
         config = self.config
         caches = []
+
         for is_linear in config.is_linear_per_layer:
             if is_linear:
                 caches.append(
@@ -228,16 +237,19 @@ class Qwen3_5Transformer:
                         head_dim=config.head_dim,
                     )
                 )
+
         return caches
 
     def reset_cache(self) -> None:
         """Clears conversation state in place, keeping resident weights and
         the expert loaders' warm caches (see `ChatSession.reset`)."""
+
         self.cache = self._new_cache()
 
     def _embed_rows(self, token_ids: list[int]) -> mx.array:
         """Reads and dequantizes only the rows these tokens need, rather
         than holding the table resident."""
+
         return self.streamer.read_linear_rows(
             self.embed_prefix,
             token_ids,
@@ -250,11 +262,16 @@ class Qwen3_5Transformer:
 
     def __call__(self, token_id: int) -> mx.array:
         """One decode step: token in, next-token logits out."""
+
         self._check_context(1)
+
         x = self._embed_rows([token_id])[0]
+
         for i, layer in enumerate(self.layers):
             x = layer(x, self.cache[i])
+
         x = mx.fast.rms_norm(x, self.final_norm, self.config.rms_norm_eps)
+
         return self._lm_head(x)
 
     def _check_context(self, count: int) -> None:
@@ -268,9 +285,12 @@ class Qwen3_5Transformer:
 
         Both cache kinds carry state across chunks, so context is preserved.
         """
+
         if not token_ids:
             raise ValueError("prefill requires at least one token")
+
         self._check_context(len(token_ids))
+
         for start in range(0, len(token_ids), self.prefill_chunk_size):
             x = self._embed_rows(token_ids[start : start + self.prefill_chunk_size])
             for i, layer in enumerate(self.layers):
@@ -278,10 +298,14 @@ class Qwen3_5Transformer:
                 # The carried state too: a cache must not retain unevaluated
                 # work from an earlier chunk.
                 mx.eval(x, *self.cache[i].state())
+
         x = mx.fast.rms_norm(x[-1], self.final_norm, self.config.rms_norm_eps)
+
         return self._lm_head(x)
 
     def close(self) -> None:
         self._read_executor.shutdown(wait=True)
+
         self.stacked_streamer.close()
+
         self.streamer.close()

@@ -94,6 +94,7 @@ def _kernel():
 
 def gated_delta_scan_metal(q, k, v, g, beta, state) -> tuple[mx.array, mx.array]:
     """Called only after the public scan has checked shapes and dtypes."""
+
     length, key_heads, key_dim = q.shape
     _, value_heads, value_dim = v.shape
     y, new_state = _kernel()(
@@ -109,4 +110,5 @@ def gated_delta_scan_metal(q, k, v, g, beta, state) -> tuple[mx.array, mx.array]
         output_shapes=[v.shape, state.shape],
         output_dtypes=[mx.float32, mx.float32],
     )
+
     return y, new_state

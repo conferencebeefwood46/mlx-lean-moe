@@ -12,6 +12,7 @@ def apply_leading_rope(
 ) -> mx.array:
     """Rotates the leading ``rotary_dim`` dimensions of ``x``, shaped
     ``(B, n_heads, seq_len, head_dim)``, and passes the rest through."""
+
     return mx.fast.rope(
         x, rotary_dim, traditional=False, base=base, scale=1.0, offset=offset
     )

@@ -19,15 +19,19 @@ class ShardFdCache:
         cached = self._fds.get(shard)
         if cached is not None:
             return cached
+
         with self._lock:
             cached = self._fds.get(shard)
             if cached is not None:
                 return cached
+
             fd = os.open(str(self.model_dir / shard), os.O_RDONLY)
             self._fds[shard] = fd
+
             return fd
 
     def close(self) -> None:
         for fd in self._fds.values():
             os.close(fd)
+
         self._fds.clear()

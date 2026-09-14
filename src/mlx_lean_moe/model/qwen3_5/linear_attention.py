@@ -24,7 +24,9 @@ def _gated_rms_norm(
 ) -> mx.array:
     """``silu(gate) * rms_norm(x, weight)``, the product taken in float32 as
     the reference's own precise path does."""
+
     normed = mx.fast.rms_norm(x, weight, eps)
+
     return (nn.silu(gate.astype(mx.float32)) * normed.astype(mx.float32)).astype(
         x.dtype
     )
@@ -61,6 +63,7 @@ class Qwen3_5LinearAttention:
     ) -> tuple[mx.array, mx.array]:
         """Depthwise causal convolution over ``(L, conv_dim)``, prefixed with
         the previous call's tail. Returns the output and the new state."""
+
         kernel = self.linear.conv_kernel_dim
         conv_state, _ = cache.state()
         conv_input = mx.concatenate([conv_state.astype(qkv.dtype), qkv], axis=0)
@@ -72,15 +75,18 @@ class Qwen3_5LinearAttention:
         # From the front, not a negative index: a kernel of 1 must keep
         # nothing rather than everything.
         tail_start = conv_input.shape[0] - (kernel - 1)
+
         return nn.silu(out), conv_input[tail_start:]
 
     def __call__(self, x: mx.array, cache: RecurrentCache) -> mx.array:
         """``x``: ``(hidden_size,)`` for one decode step, or
         ``(L, hidden_size)`` for a whole prompt. Returns the same rank."""
+
         if x.ndim not in (1, 2):
             raise ValueError(
                 f"Qwen3_5LinearAttention expects 1-D or 2-D x, got shape {x.shape}"
             )
+
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
         seq_len = rows.shape[0]
@@ -117,4 +123,5 @@ class Qwen3_5LinearAttention:
             y.astype(z.dtype), z, self.norm_weight, self.config.rms_norm_eps
         )
         out = quantized_linear(out.reshape(seq_len, -1), self.out_proj, quant)
+
         return out[0] if squeeze else out

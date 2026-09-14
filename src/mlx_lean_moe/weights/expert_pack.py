@@ -35,6 +35,7 @@ class PackLayout:
             raise ValueError(
                 f"expert pack version {document.get('version')!r}, expected {VERSION}"
             )
+
         self.num_experts: int = document["num_experts"]
         self.projections: tuple[str, ...] = tuple(document["projections"])
         self.layers: dict[int, dict] = {
@@ -43,8 +44,10 @@ class PackLayout:
 
     def expert_range(self, layer: int, expert: int) -> tuple[int, int]:
         entry = self.layers[layer]
+
         if not 0 <= expert < self.num_experts:
             raise IndexError(f"expert {expert} is outside 0..{self.num_experts - 1}")
+
         return entry["offset"] + expert * entry["stride"], entry["stride"]
 
     def fields(self, layer: int) -> list[dict]:
@@ -59,12 +62,15 @@ def _field_locations(
     layer: int,
 ) -> list[tuple[str, str, TensorLocation]]:
     """The (projection, field, location) triples a layer actually has."""
+
     found = []
+
     for projection in projections:
         for field in ("weight", "scales", "biases"):
             name = f"{layer_prefix}.{layer}.{stack_name}.{projection}.{field}"
             if name in index:
                 found.append((projection, field, index[name]))
+
     return found
 
 
@@ -80,6 +86,7 @@ def build(
     progress=None,
 ) -> Path:
     """Write a pack beside the checkpoint. Returns its path."""
+
     model_dir = Path(model_dir)
     fds = ShardFdCache(model_dir)
     layers: dict[str, dict] = {}
@@ -96,6 +103,7 @@ def build(
 
                 descriptors = []
                 within = 0
+
                 for projection, field, loc in found:
                     length = loc.length // num_experts
                     if length * num_experts != loc.length:
@@ -103,6 +111,7 @@ def build(
                             f"{layer_prefix}.{layer}.{stack_name}.{projection}.{field} is {loc.length} "
                             f"bytes over {num_experts} experts, which does not divide"
                         )
+
                     descriptors.append(
                         {
                             "projection": projection,
@@ -113,6 +122,7 @@ def build(
                             "length": length,
                         }
                     )
+
                     within += length
 
                 layers[str(layer)] = {
@@ -127,6 +137,7 @@ def build(
                         length = descriptor["length"]
                         fd = fds.fd_for_shard(loc.shard)
                         pack.write(os.pread(fd, length, loc.offset + expert * length))
+
                     written += within
 
                 if progress is not None:
@@ -141,20 +152,24 @@ def build(
         "layers": layers,
     }
     (model_dir / INDEX_NAME).write_text(json.dumps(document))
+
     return model_dir / PACK_NAME
 
 
 def verify(packed, original, layers: Sequence[int], experts: Sequence[int]) -> None:
     """Check a pack against the checkpoint it was built from, raising on the
     first disagreement."""
+
     for layer in layers:
         for expert in experts:
             want = original.load_expert(layer, expert)
             got = packed.load_expert(layer, expert)
+
             if got.keys() != want.keys():
                 raise ValueError(
                     f"layer {layer} expert {expert}: projections {sorted(got)} != {sorted(want)}"
                 )
+
             for projection, reference in want.items():
                 mine = got[projection]
                 pairs = (
@@ -165,12 +180,14 @@ def verify(packed, original, layers: Sequence[int], experts: Sequence[int]) -> N
                         for field, tensor in reference.items()
                     ]
                 )
+
                 for field, a, b in pairs:
                     if a.dtype != b.dtype or a.shape != b.shape:
                         raise ValueError(
                             f"layer {layer} expert {expert} {projection}.{field}: "
                             f"{a.dtype}{a.shape} != {b.dtype}{b.shape}"
                         )
+
                     if not mx.array_equal(a, b).item():
                         raise ValueError(
                             f"layer {layer} expert {expert} {projection}.{field}: values differ"
@@ -179,10 +196,13 @@ def verify(packed, original, layers: Sequence[int], experts: Sequence[int]) -> N
 
 def load_layout(model_dir: str | Path) -> PackLayout | None:
     """The pack's layout, or None when the checkpoint has no pack."""
+
     model_dir = Path(model_dir)
     document = model_dir / INDEX_NAME
+
     if not document.exists() or not (model_dir / PACK_NAME).exists():
         return None
+
     return PackLayout(json.loads(document.read_text()))
 
 
@@ -202,12 +222,14 @@ class ExpertPackStreamer:
     ) -> dict[str, dict[str, mx.array] | mx.array]:
         offset, stride = self.layout.expert_range(layer, expert)
         blob = os.pread(self._fd, stride, offset)
+
         if len(blob) != stride:
             raise OSError(
                 f"pack read returned {len(blob)} bytes for expert {expert} of layer {layer}, want {stride}"
             )
 
         gathered: dict[str, dict[str, mx.array]] = {}
+
         for descriptor in self.layout.fields(layer):
             start = descriptor["offset"]
             raw = blob[start : start + descriptor["length"]]
@@ -218,6 +240,7 @@ class ExpertPackStreamer:
                 tuple(descriptor["shape"]),
                 stored_width=keeps_stored_width(field),
             )
+
         return {
             projection: (tensors["weight"] if tensors.keys() == {"weight"} else tensors)
             for projection, tensors in gathered.items()
@@ -232,18 +255,22 @@ class ExpertPackStreamer:
     ):
         """One read per expert rather than one per field, so the fan-out is
         over experts. Results come back in the order asked for."""
+
         futures = {
             executor.submit(self.read_expert, layer, expert): expert
             for expert in experts
         }
         done: dict[int, dict] = {}
+
         for future in as_completed(futures):
             done[futures[future]] = future.result()
+
         return [done[expert] for expert in experts]
 
     def close(self) -> None:
         if self._fd is not None:
             os.close(self._fd)
+
             self._fd = None
 
 
@@ -254,6 +281,7 @@ def build_for_checkpoint(model_dir: str | Path, *, progress=None) -> Path:
 
     model_dir = Path(model_dir)
     config = model_config_from_hf(json.loads((model_dir / "config.json").read_text()))
+
     return build(
         model_dir,
         build_index(model_dir),
@@ -268,9 +296,12 @@ def build_for_checkpoint(model_dir: str | Path, *, progress=None) -> Path:
 def checkpoint_dir(checkpoint: str | Path) -> Path:
     """Resolve a hub repo id, or a directory, to the checkpoint's directory.
     A repo id must already be downloaded."""
+
     path = Path(checkpoint)
+
     if path.is_dir():
         return path
+
     if path.exists() or path.parts[:1] in ((".",), ("..",), ("/",)):
         raise NotADirectoryError(f"{checkpoint} is not a checkpoint directory")
 
@@ -282,6 +313,7 @@ def checkpoint_dir(checkpoint: str | Path) -> Path:
             f"{checkpoint} is neither a directory nor a downloaded repo id; fetch it with\n"
             f"  python -m mlx_lean_moe.weights.download {checkpoint}"
         )
+
     return cached
 
 
@@ -297,6 +329,7 @@ def _main() -> None:
     parser.add_argument(
         "checkpoint", help="a downloaded hub repo id, or a checkpoint directory"
     )
+
     arguments = parser.parse_args()
 
     try:

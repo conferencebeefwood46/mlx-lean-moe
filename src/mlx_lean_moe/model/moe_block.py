@@ -26,15 +26,19 @@ def quantized_linear(
     quant: QuantScheme | None = None,
 ) -> mx.array:
     """Linear projection for self-describing, legacy quantized, or dense weights."""
+
     if isinstance(tensors, LinearWeights):
         quant = tensors.quant
         tensors = tensors.tensors
+
     if isinstance(tensors, mx.array):
         # A weight-only projection is dense whatever the checkpoint-wide
         # fallback says; the on-disk fields are authoritative.
         return x @ tensors.T
+
     if quant is None:
         raise ValueError("quantized linear weights require a quantization scheme")
+
     return mx.quantized_matmul(
         x,
         tensors["weight"],

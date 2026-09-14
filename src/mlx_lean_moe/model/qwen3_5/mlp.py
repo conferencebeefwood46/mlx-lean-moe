@@ -28,11 +28,13 @@ def swiglu_mlp(
 ) -> mx.array:
     """``x``: ``(hidden_size,)`` or ``(L, hidden_size)``; returns the same
     rank. Used for the shared expert."""
+
     squeeze = x.ndim == 1
     rows = x[None, :] if squeeze else x
     gate = quantized_linear(rows, tensors["gate_proj"], quant)
     up = quantized_linear(rows, tensors["up_proj"], quant)
     out = quantized_linear(_swiglu(gate, up), tensors["down_proj"], quant)
+
     return out[0] if squeeze else out
 
 
@@ -44,6 +46,7 @@ class Qwen3_5Router:
     def __call__(self, x: mx.array) -> tuple[mx.array, mx.array]:
         """``x``: ``(hidden_size,)`` or ``(L, hidden_size)``. Returns
         ``(top_k_indices, top_k_weights)`` with a matching leading shape."""
+
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
 
@@ -53,11 +56,13 @@ class Qwen3_5Router:
         k = self.config.experts_per_token
         indices = mx.argpartition(-gates, kth=k - 1, axis=-1)[..., :k]
         scores = mx.take_along_axis(gates, indices, axis=-1)
+
         if self.config.norm_topk_prob:
             scores = scores / scores.sum(axis=-1, keepdims=True)
 
         if squeeze:
             return indices[0], scores[0]
+
         return indices, scores
 
 
@@ -88,6 +93,7 @@ class Qwen3_5Experts:
     ) -> mx.array:
         """``x``: ``(hidden_size,)`` or ``(L, hidden_size)``, returned at the
         same rank. ``before_load`` runs between routing and the reads."""
+
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
         picks = indices[None, :] if squeeze else indices
@@ -110,11 +116,14 @@ class Qwen3_5Experts:
 
         order = [slot for slots in slots_by_expert.values() for slot in slots]
         inverse = [0] * len(order)
+
         for source, destination in enumerate(order):
             inverse[destination] = source
+
         combined = mx.concatenate(grouped, axis=0)[mx.array(inverse)]
 
         out = (scores[..., None] * combined.reshape(num_rows, k, -1)).sum(axis=1)
+
         return out[0] if squeeze else out
 
     def _through_expert(self, tensors: dict, taken: mx.array) -> mx.array:
@@ -124,6 +133,7 @@ class Qwen3_5Experts:
         up = quantized_linear(
             taken, tensors["up_proj"], self.projection_quant["up_proj"]
         )
+
         return quantized_linear(
             _swiglu(gate, up), tensors["down_proj"], self.projection_quant["down_proj"]
         )
@@ -149,4 +159,5 @@ class Qwen3_5SharedExpert:
         rows = x[None, :] if squeeze else x
         gate_logit = quantized_linear(rows, self.gate, self.config.shared_gate_quant)
         gate = mx.sigmoid(gate_logit[0] if squeeze else gate_logit)
+
         return gate * out

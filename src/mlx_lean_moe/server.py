@@ -31,6 +31,7 @@ _PYTORCH_NOTICE = "PyTorch was not found"
 def _hush_missing_pytorch() -> None:
     """Silence transformers' import-time warning about PyTorch being absent;
     only its tokenizer is used here."""
+
     logging.getLogger("transformers").addFilter(
         lambda record: _PYTORCH_NOTICE not in record.getMessage()
     )
@@ -59,6 +60,7 @@ class Engine:
             import json as _json
 
             _hush_missing_pytorch()
+
             from transformers import AutoTokenizer
 
             from mlx_lean_moe.config import model_config_from_hf
@@ -66,6 +68,7 @@ class Engine:
             from mlx_lean_moe.weights.expert_loader import decode_on_this_thread
 
             decode_on_this_thread()
+
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_dir, local_files_only=True
             )
@@ -78,6 +81,7 @@ class Engine:
             )
 
         self._worker.submit(build).result()
+
         self.max_context = max_context
 
     def context_error(
@@ -85,9 +89,12 @@ class Engine:
     ) -> str | None:
         """Why this request will not fit, checked before a byte is answered:
         a stream has sent its headers by the time the model would raise."""
+
         prompt = len(self.prompt_ids(messages))
+
         if prompt + max_tokens <= self.max_context:
             return None
+
         return (
             f"this request needs {prompt} prompt tokens plus {max_tokens} of answer, "
             f"over the server's context of {self.max_context}. Shorten it, lower max_tokens, "
@@ -96,11 +103,13 @@ class Engine:
 
     def close(self) -> None:
         self._worker.submit(self.session.close).result()
+
         self._worker.shutdown(wait=True)
 
     def prompt_ids(self, messages: list[dict[str, str]]) -> list[int]:
         """Render a conversation to prompt token ids. Templates disagree on
         what they do when nobody asks for thinking, so it is always passed."""
+
         try:
             return self.tokenizer.apply_chat_template(
                 messages,
@@ -123,6 +132,7 @@ class Engine:
     ) -> Iterator[tuple[str, str | None]]:
         """Run a generation on the worker and hand its pieces back through a
         bounded queue, so a slow client stops the model."""
+
         pieces: queue.Queue = queue.Queue(maxsize=8)
         done = object()
 
@@ -136,12 +146,15 @@ class Engine:
                 pieces.put(done)
 
         self._worker.submit(run)
+
         while True:
             piece = pieces.get()
             if piece is done:
                 return
+
             if isinstance(piece, BaseException):
                 raise piece
+
             yield piece
 
     def _generate(
@@ -153,6 +166,7 @@ class Engine:
     ) -> Iterator[tuple[str, str | None]]:
         """Yield ``(text, finish_reason)``, holding back the last
         ``len(longest stop) - 1`` characters: "a#" cannot be taken back."""
+
         prompt = self.prompt_ids(messages)
         hold = max((len(s) for s in stop if s), default=1) - 1
 
@@ -169,9 +183,12 @@ class Engine:
                 break
 
             pending.append(token)
+
             text = self.tokenizer.decode(pending)
+
             if "�" in text:
                 continue
+
             pending.clear()
 
             produced += text
@@ -179,34 +196,43 @@ class Engine:
             if hit is not None:
                 if hit > sent:
                     yield produced[sent:hit], None
+
                 yield "", "stop"
+
                 return
 
             safe = len(produced) - hold
             if safe > sent:
                 yield produced[sent:safe], None
+
                 sent = safe
 
         if len(produced) > sent:
             yield produced[sent:], None
+
         yield "", finish
 
 
 def _stop_token_ids(model_dir: Path, tokenizer) -> set[int]:
     """Every token id that ends a turn: some checkpoints publish several
     beyond ``tokenizer.eos_token_id``."""
+
     generation_config = model_dir / "generation_config.json"
+
     if generation_config.exists():
         end = json.loads(generation_config.read_text()).get("eos_token_id")
         if end is not None:
             return {end} if isinstance(end, int) else set(end)
+
     return {tokenizer.eos_token_id}
 
 
 def _first_stop(text: str, stop: list[str]) -> int | None:
     """Where the earliest stop sequence begins, if one has appeared."""
+
     found = [text.find(s) for s in stop if s]
     hits = [at for at in found if at >= 0]
+
     return min(hits) if hits else None
 
 
@@ -228,16 +254,21 @@ def _chunk(
         "model": model,
         "choices": [{"index": index, "delta": delta, "finish_reason": finish}],
     }
+
     return f"data: {json.dumps(body)}\n\n"
 
 
 def _logit_bias(raw: Any) -> dict[int, float]:
     """JSON object keys are strings, so the token ids arrive as text."""
+
     if raw is None:
         return {}
+
     if not isinstance(raw, dict):
         raise ValueError("logit_bias must be an object of token id to bias")
+
     bias = {}
+
     for token, value in raw.items():
         try:
             bias[int(token)] = float(value)
@@ -245,16 +276,20 @@ def _logit_bias(raw: Any) -> dict[int, float]:
             raise ValueError(
                 f"logit_bias[{token!r}] must be a number keyed by a token id"
             ) from exc
+
     return bias
 
 
 def _choice_count(raw: Any) -> int:
     if raw is None:
         return 1
+
     if isinstance(raw, bool) or not isinstance(raw, int):
         raise ValueError(f"n must be an integer, got {raw!r}")
+
     if raw < 1:
         raise ValueError(f"n must be at least 1, got {raw}")
+
     return raw
 
 
@@ -268,10 +303,15 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _json(self, status: int, body: dict[str, Any]) -> None:
         payload = json.dumps(body).encode()
+
         self.send_response(status)
+
         self.send_header("Content-Type", "application/json")
+
         self.send_header("Content-Length", str(len(payload)))
+
         self.end_headers()
+
         self.wfile.write(payload)
 
     def _error(self, status: int, message: str) -> None:
@@ -294,12 +334,15 @@ class _Handler(BaseHTTPRequestHandler):
                     ],
                 },
             )
+
             return
+
         self._error(404, f"no route for {self.path}")
 
     def do_POST(self) -> None:
         if self.path.rstrip("/") not in ("/v1/chat/completions", "/chat/completions"):
             self._error(404, f"no route for {self.path}")
+
             return
 
         try:
@@ -307,11 +350,13 @@ class _Handler(BaseHTTPRequestHandler):
             request = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, json.JSONDecodeError) as exc:
             self._error(400, f"could not read the request body: {exc}")
+
             return
 
         messages = request.get("messages")
         if not isinstance(messages, list) or not messages:
             self._error(400, "messages must be a non-empty list")
+
             return
 
         max_tokens = (
@@ -320,6 +365,7 @@ class _Handler(BaseHTTPRequestHandler):
             or DEFAULT_MAX_TOKENS
         )
         stop = request.get("stop") or []
+
         if isinstance(stop, str):
             stop = [stop]
 
@@ -337,11 +383,13 @@ class _Handler(BaseHTTPRequestHandler):
             )
         except (TypeError, ValueError) as exc:
             self._error(400, str(exc))
+
             return
 
         too_long = self.engine.context_error(messages, int(max_tokens))
         if too_long is not None:
             self._error(400, too_long)
+
             return
 
         try:
@@ -365,8 +413,10 @@ class _Handler(BaseHTTPRequestHandler):
             messages, max_tokens, stop, sampling.for_choice(index)
         ):
             text += piece
+
             if reason is not None:
                 finish = reason
+
         return text, finish
 
     def _whole(
@@ -409,14 +459,20 @@ class _Handler(BaseHTTPRequestHandler):
     ) -> None:
         completion_id = _completion_id()
         model = self.engine.model_id
+
         self.send_response(200)
+
         self.send_header("Content-Type", "text/event-stream")
+
         self.send_header("Cache-Control", "no-cache")
+
         self.send_header("Connection", "close")
+
         self.end_headers()
 
         def write(payload: str) -> None:
             self.wfile.write(payload.encode())
+
             self.wfile.flush()
 
         for index in range(choices):
@@ -429,15 +485,20 @@ class _Handler(BaseHTTPRequestHandler):
                     index,
                 )
             )
+
             pieces = self.engine.generate(
                 messages, max_tokens, stop, sampling.for_choice(index)
             )
+
             for piece, reason in pieces:
                 if piece:
                     write(_chunk(completion_id, model, {"content": piece}, None, index))
+
                 if reason is not None:
                     write(_chunk(completion_id, model, {}, reason, index))
+
         write("data: [DONE]\n\n")
+
         self.close_connection = True
 
 
@@ -452,6 +513,7 @@ class _Server(ThreadingHTTPServer):
             sys.exception(), (ConnectionError, BrokenPipeError, TimeoutError)
         ):
             return
+
         super().handle_error(request, client_address)
 
 
@@ -459,7 +521,9 @@ def serve(
     engine: Engine, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT
 ) -> ThreadingHTTPServer:
     """Start serving `engine`. Returns the server, already listening."""
+
     handler = type("_BoundHandler", (_Handler,), {"engine": engine})
+
     return _Server((host, port), handler)
 
 
@@ -471,6 +535,7 @@ def _resolve_model(requested: str | None) -> str:
     if requested is not None:
         if download.is_complete(requested):
             return requested
+
         raise SystemExit(
             f"{requested} is not downloaded. Fetch it with:\n  python -m mlx_lean_moe.weights.download {requested}"
         )
@@ -478,10 +543,12 @@ def _resolve_model(requested: str | None) -> str:
     cached = download.cached_checkpoints()
     if len(cached) == 1:
         return cached[0]
+
     if not cached:
         raise SystemExit(
             "no checkpoint is downloaded. Fetch one with:\n  python -m mlx_lean_moe.weights.download <repo id>"
         )
+
     listed = "\n".join(f"  {repo_id}" for repo_id in cached)
     raise SystemExit(
         f"several checkpoints are downloaded; pick one with --model:\n{listed}"
@@ -501,25 +568,31 @@ def _main() -> None:
     parser.add_argument(
         "--model", default=None, help="hub repo id (default: the only one downloaded)"
     )
+
     parser.add_argument("--host", default=DEFAULT_HOST)
+
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+
     parser.add_argument(
         "--max-context",
         type=int,
         default=DEFAULT_MAX_CONTEXT,
         help=f"attention context length, fixed at startup (default: {DEFAULT_MAX_CONTEXT})",
     )
+
     parser.add_argument(
         "--expert-cache",
         type=int,
         default=None,
         help="experts kept resident per layer (default: the top-k). The memory dial.",
     )
+
     parser.add_argument(
         "--think",
         action="store_true",
         help="let the model emit a reasoning block before answering",
     )
+
     arguments = parser.parse_args()
 
     model = _resolve_model(arguments.model)
@@ -533,16 +606,19 @@ def _main() -> None:
     server = serve(engine, arguments.host, arguments.port)
     host, port = server.server_address[:2]
     print(f"serving {model} at http://{host}:{port}/v1", file=sys.stderr)
+
     print(
         f"  aider --openai-api-base http://{host}:{port}/v1 --model openai/{model}",
         file=sys.stderr,
     )
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+
         engine.close()
 
 

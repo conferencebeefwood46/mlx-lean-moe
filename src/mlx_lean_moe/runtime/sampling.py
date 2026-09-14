@@ -29,14 +29,17 @@ class Sampling:
             raise ValueError(
                 f"temperature must not be negative, got {self.temperature}"
             )
+
         if not 0 < self.top_p <= 1:
             raise ValueError(f"top_p must be in (0, 1], got {self.top_p}")
+
         for name in ("frequency_penalty", "presence_penalty"):
             value = getattr(self, name)
             if not -PENALTY_LIMIT <= value <= PENALTY_LIMIT:
                 raise ValueError(
                     f"{name} must be in [-{PENALTY_LIMIT}, {PENALTY_LIMIT}], got {value}"
                 )
+
         for token, bias in self.logit_bias.items():
             if not -BIAS_LIMIT <= bias <= BIAS_LIMIT:
                 raise ValueError(
@@ -51,13 +54,16 @@ class Sampling:
     def shifts_logits(self) -> bool:
         """Whether anything here moves a logit before it is read. Greedy
         decoding honours these too: they change which token is the argmax."""
+
         return bool(self.frequency_penalty or self.presence_penalty or self.logit_bias)
 
     def for_choice(self, index: int) -> "Sampling":
         """The settings for one of a request's `n` completions. Each moves the
         seed, which reused would return the same completion `n` times."""
+
         if index == 0 or self.seed is None:
             return self
+
         return replace(self, seed=self.seed + index)
 
 
@@ -85,16 +91,20 @@ class Sampler:
             key = None
             if self._key is not None:
                 self._key, key = mx.random.split(self._key)
+
             token = int(mx.random.categorical(scaled, key=key).item())
 
         self._produced[token] += 1
+
         return token
 
     def _shifted(self, logits: mx.array) -> mx.array:
         """Logits with `logit_bias` added and the penalties subtracted. The
         penalties count only what this sampler produced, not the prompt."""
+
         sampling = self.sampling
         deltas: dict[int, float] = dict(sampling.logit_bias)
+
         if sampling.frequency_penalty or sampling.presence_penalty:
             for token, count in self._produced.items():
                 penalty = sampling.frequency_penalty * count + sampling.presence_penalty
@@ -102,15 +112,18 @@ class Sampler:
 
         if not deltas:
             return logits
+
         row = logits.reshape(-1).astype(mx.float32)
         ids = mx.array(list(deltas))
         row[ids] = row[ids] + mx.array(list(deltas.values()), dtype=mx.float32)
+
         return row
 
 
 def _nucleus(logits: mx.array, top_p: float) -> mx.array:
     """The smallest set of tokens whose cumulative probability reaches
     `top_p`, the crossing token included, or a peaked one would keep none."""
+
     order = mx.argsort(-logits)
     ordered = logits[order]
     kept = mx.cumsum(mx.softmax(ordered)) - mx.softmax(ordered) < top_p
@@ -118,4 +131,5 @@ def _nucleus(logits: mx.array, top_p: float) -> mx.array:
     masked = mx.where(kept, ordered, -mx.inf)
     restored = mx.zeros_like(masked)
     restored[order] = masked
+
     return restored

@@ -26,6 +26,7 @@ HK, HV, DK, DV = (
 def _inputs(seed: int, seq_len: int):
     rng = np.random.default_rng(seed)
     f32 = lambda *shape: mx.array(rng.standard_normal(shape).astype(np.float32))
+
     return {
         "q": f32(seq_len, HK, DK),
         "k": f32(seq_len, HK, DK),
@@ -41,6 +42,7 @@ def _inputs(seed: int, seq_len: int):
 def test_scan_matches_mlx_lm_reference(seq_len):
     """Against mlx_lm's `gated_delta_update` ops path, its Metal kernel
     being an optimization of the same math."""
+
     x = _inputs(seed=0, seq_len=seq_len)
     state = mx.zeros((HV, DV, DK), dtype=mx.float32)
 
@@ -67,6 +69,7 @@ def test_scan_matches_mlx_lm_reference(seq_len):
     )
 
     mx.eval(ours_y, ours_state, ref_y, ref_state)
+
     assert mx.allclose(ours_y, ref_y[0], rtol=1e-4, atol=1e-5).item()
     assert mx.allclose(ours_state, ref_state[0], rtol=1e-4, atol=1e-5).item()
 
@@ -74,6 +77,7 @@ def test_scan_matches_mlx_lm_reference(seq_len):
 def test_scan_continues_from_a_carried_state():
     """5 positions in one call must equal 2 then 3 carrying the state, which
     is what decode does after prefill."""
+
     x = _inputs(seed=1, seq_len=5)
     g, beta = forget_gate(x["a"], x["A_log"], x["dt_bias"]), mx.sigmoid(x["b"])
     zero = mx.zeros((HV, DV, DK), dtype=mx.float32)
@@ -89,6 +93,7 @@ def test_scan_continues_from_a_carried_state():
     split_y = mx.concatenate([first_y, second_y])
 
     mx.eval(whole_y, whole_state, split_y, final_state)
+
     assert mx.allclose(whole_y, split_y, rtol=1e-5, atol=1e-6).item()
     assert mx.allclose(whole_state, final_state, rtol=1e-5, atol=1e-6).item()
 
@@ -111,6 +116,7 @@ def test_single_step_matches_the_scan_of_one():
     )
 
     mx.eval(scan_y, scan_state, step_y, step_state)
+
     assert mx.allclose(scan_y[0], step_y, rtol=1e-6, atol=1e-7).item()
     assert mx.allclose(scan_state, step_state, rtol=1e-6, atol=1e-7).item()
 
@@ -118,8 +124,10 @@ def test_single_step_matches_the_scan_of_one():
 def test_forget_gate_is_a_decay_in_the_unit_interval():
     """g multiplies the state every step, so it has to stay in (0, 1] --
     anything above 1 would make the recurrence blow up over a long context."""
+
     x = _inputs(seed=3, seq_len=4)
     g = forget_gate(x["a"], x["A_log"], x["dt_bias"])
     mx.eval(g)
+
     assert bool((g > 0).all().item())
     assert bool((g <= 1.0).all().item())
