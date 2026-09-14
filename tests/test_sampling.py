@@ -53,8 +53,18 @@ def test_the_same_seed_replays_and_a_different_one_does_not():
     again = [Sampler(Sampling(temperature=1.0, seed=42))(logits) for _ in range(1)]
     assert first == again
 
-    run_a = [x for x in _draws(Sampler(Sampling(temperature=1.0, seed=42)), logits, 30).elements()]
-    run_b = [x for x in _draws(Sampler(Sampling(temperature=1.0, seed=42)), logits, 30).elements()]
+    run_a = [
+        x
+        for x in _draws(
+            Sampler(Sampling(temperature=1.0, seed=42)), logits, 30
+        ).elements()
+    ]
+    run_b = [
+        x
+        for x in _draws(
+            Sampler(Sampling(temperature=1.0, seed=42)), logits, 30
+        ).elements()
+    ]
     assert run_a == run_b
 
 
@@ -176,7 +186,12 @@ def test_a_penalty_and_a_bias_on_one_token_both_apply():
     """On the same logit: the bias alone never flips this pair, the penalty
     alone flips it on the fourth step, together on the third."""
     logits = mx.array([3.0, 2.0])
-    assert [Sampler(Sampling(logit_bias={0: -0.4}))(logits) for _ in range(4)] == [0, 0, 0, 0]
+    assert [Sampler(Sampling(logit_bias={0: -0.4}))(logits) for _ in range(4)] == [
+        0,
+        0,
+        0,
+        0,
+    ]
 
     penalty_only = Sampler(Sampling(frequency_penalty=0.4))
     assert [penalty_only(logits) for _ in range(4)] == [0, 0, 0, 1]
@@ -214,7 +229,10 @@ def test_each_choice_of_a_seeded_request_moves_the_seed():
     assert base.for_choice(3).seed == 14
 
     logits = mx.array([1.0] * 16)
-    draws = {tuple(_draws(Sampler(base.for_choice(i)), logits, 8).elements()) for i in range(4)}
+    draws = {
+        tuple(_draws(Sampler(base.for_choice(i)), logits, 8).elements())
+        for i in range(4)
+    }
     assert len(draws) == 4
 
 

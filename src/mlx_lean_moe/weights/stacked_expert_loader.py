@@ -11,7 +11,11 @@ from pathlib import Path
 import mlx.core as mx
 
 from mlx_lean_moe.weights._shard_fds import ShardFdCache
-from mlx_lean_moe.weights.expert_loader import DEFAULT_PROJECTIONS, decode_tensor, keeps_stored_width
+from mlx_lean_moe.weights.expert_loader import (
+    DEFAULT_PROJECTIONS,
+    decode_tensor,
+    keeps_stored_width,
+)
 from mlx_lean_moe.weights.safetensors_index import TensorLocation
 
 _FIELDS = ("weight", "scales", "biases")
@@ -55,21 +59,33 @@ class StackedExpertStreamer:
             length=per_expert_length,
         )
 
-    def read_expert_tensor(self, layer: int, expert: int, proj: str, field: str) -> mx.array:
+    def read_expert_tensor(
+        self, layer: int, expert: int, proj: str, field: str
+    ) -> mx.array:
         whole = self.index[self._tensor_name(layer, proj, field)]
         loc = self._expert_location(whole, expert)
         fd = self._fds.fd_for_shard(loc.shard)
         raw = os.pread(fd, loc.length, loc.offset)
-        return decode_tensor(raw, loc.dtype, loc.shape, stored_width=keeps_stored_width(field))
+        return decode_tensor(
+            raw, loc.dtype, loc.shape, stored_width=keeps_stored_width(field)
+        )
 
     def _projection_fields(self, layer: int, proj: str) -> tuple[str, ...]:
         """Which of weight/scales/biases this projection actually has: a
         mixed checkpoint can leave one dense while its neighbours are not."""
-        fields = tuple(field for field in _FIELDS if self._tensor_name(layer, proj, field) in self.index)
+        fields = tuple(
+            field
+            for field in _FIELDS
+            if self._tensor_name(layer, proj, field) in self.index
+        )
         if "weight" not in fields:
-            raise KeyError(f"no weight tensor for expert projection layer {layer} {proj}")
+            raise KeyError(
+                f"no weight tensor for expert projection layer {layer} {proj}"
+            )
         if "scales" not in fields and fields != ("weight",):
-            raise ValueError(f"expert projection layer {layer} {proj} has biases but no scales")
+            raise ValueError(
+                f"expert projection layer {layer} {proj} has biases but no scales"
+            )
         return fields
 
     @staticmethod
@@ -94,7 +110,9 @@ class StackedExpertStreamer:
     ) -> list[dict[str, dict[str, mx.array]]]:
         """`load_expert` for each of `experts`, every read submitted to
         `executor` as one flat batch: nested futures could deadlock."""
-        projection_fields = {proj: self._projection_fields(layer, proj) for proj in self.projections}
+        projection_fields = {
+            proj: self._projection_fields(layer, proj) for proj in self.projections
+        }
         keys = [
             (expert, proj, field)
             for expert in experts
@@ -102,7 +120,11 @@ class StackedExpertStreamer:
             for field in projection_fields[proj]
         ]
         futures = {
-            executor.submit(self.read_expert_tensor, layer, expert, proj, field): (expert, proj, field)
+            executor.submit(self.read_expert_tensor, layer, expert, proj, field): (
+                expert,
+                proj,
+                field,
+            )
             for expert, proj, field in keys
         }
         partial: dict[int, dict[str, dict[str, mx.array]]] = {}
@@ -110,7 +132,11 @@ class StackedExpertStreamer:
             expert, proj, field = futures[future]
             partial.setdefault(expert, {}).setdefault(proj, {})[field] = future.result()
         return [
-            {proj: self._assemble_projection(partial[expert][proj]) for proj in self.projections} for expert in experts
+            {
+                proj: self._assemble_projection(partial[expert][proj])
+                for proj in self.projections
+            }
+            for expert in experts
         ]
 
     def close(self) -> None:

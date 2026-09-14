@@ -26,7 +26,9 @@ class RecurrentCache:
         self.conv_state = mx.zeros((conv_kernel_dim - 1, conv_dim), dtype=dtype)
         # float32 whatever the checkpoint's dtype, as the reference does via
         # `mamba_ssm_dtype`: this accumulates over the whole sequence.
-        self.ssm_state = mx.zeros((num_value_heads, value_head_dim, key_head_dim), dtype=mx.float32)
+        self.ssm_state = mx.zeros(
+            (num_value_heads, value_head_dim, key_head_dim), dtype=mx.float32
+        )
         self.size = 0
 
     def state(self) -> tuple[mx.array, mx.array]:

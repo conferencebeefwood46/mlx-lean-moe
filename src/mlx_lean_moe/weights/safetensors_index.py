@@ -56,7 +56,9 @@ def _discover_shards(model_dir: Path) -> list[str]:
     single = model_dir / "model.safetensors"
     if single.exists():
         return [single.name]
-    raise FileNotFoundError(f"no {_INDEX_FILENAME} or model.safetensors found under {model_dir}")
+    raise FileNotFoundError(
+        f"no {_INDEX_FILENAME} or model.safetensors found under {model_dir}"
+    )
 
 
 def checkpoint_is_complete(model_dir: str | Path) -> bool:
@@ -79,7 +81,11 @@ def checkpoint_is_complete(model_dir: str | Path) -> bool:
             # truncated mid-JSON.
             return False
         data_end = max(
-            (meta["data_offsets"][1] for name, meta in header.items() if name != "__metadata__"),
+            (
+                meta["data_offsets"][1]
+                for name, meta in header.items()
+                if name != "__metadata__"
+            ),
             default=0,
         )
         if path.stat().st_size < data_start + data_end:
@@ -87,7 +93,9 @@ def checkpoint_is_complete(model_dir: str | Path) -> bool:
     return True
 
 
-def build_index(model_dir: str | Path, *, use_cache: bool = True) -> dict[str, TensorLocation]:
+def build_index(
+    model_dir: str | Path, *, use_cache: bool = True
+) -> dict[str, TensorLocation]:
     """Build (or load a cached) tensor -> :class:`TensorLocation` index."""
     model_dir = Path(model_dir)
     sidecar = model_dir / _SIDECAR_FILENAME

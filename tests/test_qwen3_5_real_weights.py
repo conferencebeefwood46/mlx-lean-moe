@@ -35,7 +35,9 @@ FULL_LAYER = 3
 
 @pytest.fixture(scope="module")
 def config():
-    return model_config_from_hf(json.loads((QWEN3_5_MODEL_DIR / "config.json").read_text()))
+    return model_config_from_hf(
+        json.loads((QWEN3_5_MODEL_DIR / "config.json").read_text())
+    )
 
 
 @pytest.fixture(scope="module")
@@ -148,7 +150,9 @@ def test_linear_attention_matches_mlx_lm_on_real_weights(config, streamer, seq_l
     got = ours(x, cache)
     expected = ref(x[None], mask=None, cache=ref_cache)[0]
     mx.eval(got, expected)
-    assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(mx.max(mx.abs(got - expected)).item())
+    assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(
+        mx.max(mx.abs(got - expected)).item()
+    )
 
     # Continue from actual checkpoint activations, testing both convolution
     # history and recurrent state after a multi-chunk-sized prompt.
@@ -164,7 +168,10 @@ def test_linear_attention_matches_mlx_lm_on_real_weights(config, streamer, seq_l
 def test_full_attention_matches_mlx_lm_on_real_weights(config, streamer):
     prefix = f"{PREFIX}.layers.{FULL_LAYER}.self_attn"
     quant = config.other_quant
-    tensors = {name: read_quantized(streamer, f"{prefix}.{name}") for name in ("q_proj", "k_proj", "v_proj", "o_proj")}
+    tensors = {
+        name: read_quantized(streamer, f"{prefix}.{name}")
+        for name in ("q_proj", "k_proj", "v_proj", "o_proj")
+    }
     q_norm = streamer.read_tensor(f"{prefix}.q_norm.weight")
     k_norm = streamer.read_tensor(f"{prefix}.k_norm.weight")
 
@@ -187,14 +194,19 @@ def test_full_attention_matches_mlx_lm_on_real_weights(config, streamer):
     mx.random.seed(1)
     x = mx.random.normal((4, config.hidden_size))
     cache = GrowingKVCache(
-        max_context=16, num_kv_heads=config.num_key_value_heads, head_dim=config.head_dim, dtype=mx.float32
+        max_context=16,
+        num_kv_heads=config.num_key_value_heads,
+        head_dim=config.head_dim,
+        dtype=mx.float32,
     )
 
     got = ours(x, cache)
     mlx_lm_cache = pytest.importorskip("mlx_lm.models.cache")
     expected = ref(x[None], mask="causal", cache=mlx_lm_cache.KVCache())[0]
     mx.eval(got, expected)
-    assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(mx.max(mx.abs(got - expected)).item())
+    assert mx.allclose(got, expected, rtol=1e-3, atol=1e-3).item(), float(
+        mx.max(mx.abs(got - expected)).item()
+    )
 
 
 def test_q_proj_really_is_double_width_for_the_output_gate(config, streamer):

@@ -45,7 +45,9 @@ class Qwen3_5DecoderLayer:
         self.eps = config.rms_norm_eps
         self.is_linear = config.is_linear_per_layer[layer_index]
         self.input_layernorm = streamer.read_tensor(f"{prefix}.input_layernorm.weight")
-        self.post_attention_layernorm = streamer.read_tensor(f"{prefix}.post_attention_layernorm.weight")
+        self.post_attention_layernorm = streamer.read_tensor(
+            f"{prefix}.post_attention_layernorm.weight"
+        )
 
         if self.is_linear:
             attn_prefix = f"{prefix}.linear_attn"
@@ -74,7 +76,10 @@ class Qwen3_5DecoderLayer:
             )
 
         mlp_prefix = f"{prefix}.mlp"
-        self.router = Qwen3_5Router(config, gate=self._read_linear(streamer, f"{mlp_prefix}.gate", config.router_quant))
+        self.router = Qwen3_5Router(
+            config,
+            gate=self._read_linear(streamer, f"{mlp_prefix}.gate", config.router_quant),
+        )
         self.experts = Qwen3_5Experts(config, layer_index, expert_loader)
         self.shared_expert = Qwen3_5SharedExpert(
             config,
@@ -82,7 +87,9 @@ class Qwen3_5DecoderLayer:
                 proj: self._read_linear(streamer, f"{mlp_prefix}.shared_expert.{proj}")
                 for proj in ("gate_proj", "up_proj", "down_proj")
             },
-            gate=self._read_linear(streamer, f"{mlp_prefix}.shared_expert_gate", config.shared_gate_quant),
+            gate=self._read_linear(
+                streamer, f"{mlp_prefix}.shared_expert_gate", config.shared_gate_quant
+            ),
         )
 
     def _read_linear(self, streamer: TensorStreamer, name: str, fallback=None):
@@ -92,18 +99,24 @@ class Qwen3_5DecoderLayer:
         """``x``: ``(hidden_size,)`` for a decode step, or
         ``(L, hidden_size)`` for a batched prefill."""
         if x.ndim not in (1, 2):
-            raise ValueError(f"Qwen3_5DecoderLayer expects 1-D or 2-D x, got shape {x.shape}")
+            raise ValueError(
+                f"Qwen3_5DecoderLayer expects 1-D or 2-D x, got shape {x.shape}"
+            )
         squeeze = x.ndim == 1
         rows = x[None, :] if squeeze else x
 
-        h = rows + self.attention(mx.fast.rms_norm(rows, self.input_layernorm, self.eps), cache)
+        h = rows + self.attention(
+            mx.fast.rms_norm(rows, self.input_layernorm, self.eps), cache
+        )
 
         normed = mx.fast.rms_norm(h, self.post_attention_layernorm, self.eps)
         indices, weights = self.router(normed)
         # Dispatched into the expert-read window, the one stretch where the
         # device is otherwise idle.
         shared = self.shared_expert(normed)
-        routed = self.experts(normed, indices, weights, before_load=lambda: mx.async_eval(shared))
+        routed = self.experts(
+            normed, indices, weights, before_load=lambda: mx.async_eval(shared)
+        )
         out = h + routed + shared
         return out[0] if squeeze else out
 
@@ -139,7 +152,9 @@ class Qwen3_5Transformer:
         # stacked tensors are read directly.
         layout = expert_pack.load_layout(self.model_dir)
         if layout is not None and layout.num_experts != config.num_experts:
-            raise ValueError(f"expert pack holds {layout.num_experts} experts, checkpoint has {config.num_experts}")
+            raise ValueError(
+                f"expert pack holds {layout.num_experts} experts, checkpoint has {config.num_experts}"
+            )
         self.stacked_streamer = (
             expert_pack.ExpertPackStreamer(self.model_dir, layout)
             if layout is not None
@@ -155,7 +170,9 @@ class Qwen3_5Transformer:
             prefix = f"{config.tensor_prefix}.layers.{layer_index}.mlp.switch_mlp"
             for projection in ("gate_proj", "up_proj", "down_proj"):
                 name = f"{prefix}.{projection}"
-                validate_linear_layout(index, name, config.quant_for(name, config.expert_quant))
+                validate_linear_layout(
+                    index, name, config.quant_for(name, config.expert_quant)
+                )
         cache_size = expert_cache_size_per_layer or config.experts_per_token
         self.expert_loaders = [
             CachedExpertLoader(
@@ -170,15 +187,22 @@ class Qwen3_5Transformer:
         # `_embed_rows`.
         self.embed_prefix = f"{config.tensor_prefix}.embed_tokens"
         self.embed_quant = config.quant_for(self.embed_prefix)
-        self.embed_is_quantized = validate_linear_layout(index, self.embed_prefix, self.embed_quant)
-        self.final_norm = self.streamer.read_tensor(f"{config.tensor_prefix}.norm.weight")
+        self.embed_is_quantized = validate_linear_layout(
+            index, self.embed_prefix, self.embed_quant
+        )
+        self.final_norm = self.streamer.read_tensor(
+            f"{config.tensor_prefix}.norm.weight"
+        )
         # A real tensor, embeddings not being tied here, and it sits beside
         # `model` rather than inside it.
         lm_head_prefix = config.tensor_prefix.rsplit(".", 1)[0] + ".lm_head"
-        self.lm_head = read_linear(self.streamer, lm_head_prefix, config.quant_for(lm_head_prefix))
+        self.lm_head = read_linear(
+            self.streamer, lm_head_prefix, config.quant_for(lm_head_prefix)
+        )
 
         self.layers = [
-            Qwen3_5DecoderLayer(config, i, self.streamer, self.expert_loaders[i]) for i in range(config.num_layers)
+            Qwen3_5DecoderLayer(config, i, self.streamer, self.expert_loaders[i])
+            for i in range(config.num_layers)
         ]
         self.cache = self._new_cache()
 
@@ -235,7 +259,9 @@ class Qwen3_5Transformer:
 
     def _check_context(self, count: int) -> None:
         if self.cache and self.cache[0].size + count > self.max_context:
-            raise IndexError(f"Qwen3_5Transformer exceeded its capacity of {self.max_context} tokens")
+            raise IndexError(
+                f"Qwen3_5Transformer exceeded its capacity of {self.max_context} tokens"
+            )
 
     def prefill(self, token_ids: list[int]) -> mx.array:
         """Process a prompt in bounded chunks, returning only final logits.

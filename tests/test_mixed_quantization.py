@@ -9,7 +9,9 @@ from mlx_lean_moe.weights.expert_loader import TensorStreamer, read_linear
 from mlx_lean_moe.weights.safetensors_index import build_index
 
 
-def _quantize(weight: np.ndarray, scheme: QuantScheme) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _quantize(
+    weight: np.ndarray, scheme: QuantScheme
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     packed, scales, biases = mx.quantize(
         mx.array(weight),
         group_size=scheme.group_size,
@@ -20,7 +22,9 @@ def _quantize(weight: np.ndarray, scheme: QuantScheme) -> tuple[np.ndarray, np.n
     return np.array(packed), np.array(scales), np.array(biases)
 
 
-def _add_quantized(tensors: dict[str, np.ndarray], name: str, weight: np.ndarray, scheme: QuantScheme) -> None:
+def _add_quantized(
+    tensors: dict[str, np.ndarray], name: str, weight: np.ndarray, scheme: QuantScheme
+) -> None:
     packed, scales, biases = _quantize(weight, scheme)
     tensors[f"{name}.weight"] = packed
     tensors[f"{name}.scales"] = scales
@@ -37,7 +41,9 @@ def test_linear_loader_runs_adjacent_projections_with_their_own_schemes(tmp_path
         "eight_bit_proj": QuantScheme(bits=8, group_size=64),
     }
     dense_weight = rng.normal(0, 0.1, (9, 64)).astype(np.float32)
-    source_weights = {name: rng.normal(0, 0.1, (9, 64)).astype(np.float32) for name in schemes}
+    source_weights = {
+        name: rng.normal(0, 0.1, (9, 64)).astype(np.float32) for name in schemes
+    }
     tensors: dict[str, np.ndarray] = {"dense_proj.weight": dense_weight}
     for name, scheme in schemes.items():
         _add_quantized(tensors, name, source_weights[name], scheme)
@@ -60,14 +66,18 @@ def test_linear_loader_runs_adjacent_projections_with_their_own_schemes(tmp_path
                 bits=scheme.bits,
             ).T
         )
-        np.testing.assert_allclose(np.array(actual), np.array(reference), rtol=2e-4, atol=2e-4)
+        np.testing.assert_allclose(
+            np.array(actual), np.array(reference), rtol=2e-4, atol=2e-4
+        )
 
     with pytest.raises(ValueError, match="expected packed width"):
         read_linear(streamer, "gate_proj", QuantScheme(bits=4, group_size=32))
 
     dense = read_linear(streamer, "dense_proj", QuantScheme(bits=4, group_size=64))
     assert dense.quant is None
-    np.testing.assert_allclose(np.array(quantized_linear(x, dense)), np.array(x @ mx.array(dense_weight).T))
+    np.testing.assert_allclose(
+        np.array(quantized_linear(x, dense)), np.array(x @ mx.array(dense_weight).T)
+    )
     streamer.close()
 
 

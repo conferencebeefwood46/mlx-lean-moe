@@ -23,16 +23,24 @@ def _write_stacked_checkpoint(model_dir, num_layers=1):
     for layer in range(num_layers):
         for proj in PROJECTIONS:
             prefix = f"{LAYER_PREFIX}.{layer}.experts.switch_glu.{proj}"
-            all_tensors[f"{prefix}.weight"] = rng.integers(0, 255, size=(NUM_EXPERTS, 8, 4), dtype=np.uint8)
-            all_tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 8, 1)).astype(np.float32)
-            all_tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 8, 1)).astype(np.float32)
+            all_tensors[f"{prefix}.weight"] = rng.integers(
+                0, 255, size=(NUM_EXPERTS, 8, 4), dtype=np.uint8
+            )
+            all_tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 8, 1)).astype(
+                np.float32
+            )
+            all_tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 8, 1)).astype(
+                np.float32
+            )
     save_file(all_tensors, str(model_dir / "model.safetensors"))
     return all_tensors
 
 
 def _streamer_for(model_dir) -> StackedExpertStreamer:
     index = build_index(model_dir, use_cache=False)
-    return StackedExpertStreamer(model_dir, index, num_experts=NUM_EXPERTS, layer_prefix=LAYER_PREFIX)
+    return StackedExpertStreamer(
+        model_dir, index, num_experts=NUM_EXPERTS, layer_prefix=LAYER_PREFIX
+    )
 
 
 def test_load_expert_matches_an_independently_sliced_reference(tmp_path):
@@ -44,7 +52,9 @@ def test_load_expert_matches_an_independently_sliced_reference(tmp_path):
         for field in ("weight", "scales", "biases"):
             # Sliced on the reference array, independently of
             # _expert_location's own offset math.
-            expected = reference[f"{LAYER_PREFIX}.0.experts.switch_glu.{proj}.{field}"][2]
+            expected = reference[f"{LAYER_PREFIX}.0.experts.switch_glu.{proj}.{field}"][
+                2
+            ]
             actual = np.array(loaded[proj][field])
             np.testing.assert_array_equal(actual, expected)
 
@@ -56,7 +66,9 @@ def test_load_expert_only_reads_the_requested_expert(tmp_path):
     streamer = _streamer_for(tmp_path)
 
     loaded = streamer.load_expert(layer=0, expert=0)
-    other_expert_weight = reference[f"{LAYER_PREFIX}.0.experts.switch_glu.gate_proj.weight"][1]
+    other_expert_weight = reference[
+        f"{LAYER_PREFIX}.0.experts.switch_glu.gate_proj.weight"
+    ][1]
     this_expert_weight = np.array(loaded["gate_proj"]["weight"])
     assert this_expert_weight.shape == other_expert_weight.shape
     assert not np.array_equal(this_expert_weight, other_expert_weight)
@@ -75,7 +87,9 @@ def test_load_experts_concurrently_matches_sequential_load_expert(tmp_path):
     for e, a in zip(expected, actual):
         for proj in PROJECTIONS:
             for field in ("weight", "scales", "biases"):
-                np.testing.assert_array_equal(np.array(e[proj][field]), np.array(a[proj][field]))
+                np.testing.assert_array_equal(
+                    np.array(e[proj][field]), np.array(a[proj][field])
+                )
 
     streamer.close()
 
@@ -119,7 +133,9 @@ def test_stacked_experts_mix_3bit_6bit_and_dense_projections(tmp_path):
                 per_field.setdefault("weight", []).append(weight)
             else:
                 scheme = schemes[proj]
-                packed, scales, biases = mx.quantize(mx.array(weight), group_size=scheme.group_size, bits=scheme.bits)
+                packed, scales, biases = mx.quantize(
+                    mx.array(weight), group_size=scheme.group_size, bits=scheme.bits
+                )
                 mx.eval(packed, scales, biases)
                 per_field.setdefault("weight", []).append(np.array(packed))
                 per_field.setdefault("scales", []).append(np.array(scales))
@@ -135,17 +151,25 @@ def test_stacked_experts_mix_3bit_6bit_and_dense_projections(tmp_path):
         concurrent = streamer.load_experts_concurrently(0, [2], executor)[0]
 
     assert isinstance(sequential["up_proj"], mx.array)
-    np.testing.assert_array_equal(np.array(sequential["up_proj"]), references["up_proj"][2])
+    np.testing.assert_array_equal(
+        np.array(sequential["up_proj"]), references["up_proj"][2]
+    )
     for proj in ("gate_proj", "down_proj"):
         assert set(sequential[proj]) == {"weight", "scales", "biases"}
         for field in sequential[proj]:
-            np.testing.assert_array_equal(np.array(sequential[proj][field]), np.array(concurrent[proj][field]))
+            np.testing.assert_array_equal(
+                np.array(sequential[proj][field]), np.array(concurrent[proj][field])
+            )
 
     x = mx.array(rng.normal(0, 0.1, (2, 64)).astype(np.float32))
     # Dense expert projections ignore the global quantization fallback and
     # execute as an ordinary matrix multiplication.
-    dense_actual = quantized_linear(x, sequential["up_proj"], QuantScheme(bits=4, group_size=64))
-    np.testing.assert_allclose(np.array(dense_actual), np.array(x @ mx.array(references["up_proj"][2]).T))
+    dense_actual = quantized_linear(
+        x, sequential["up_proj"], QuantScheme(bits=4, group_size=64)
+    )
+    np.testing.assert_allclose(
+        np.array(dense_actual), np.array(x @ mx.array(references["up_proj"][2]).T)
+    )
     for proj in ("gate_proj", "down_proj"):
         actual = quantized_linear(x, sequential[proj], schemes[proj])
         reference = (
@@ -158,5 +182,7 @@ def test_stacked_experts_mix_3bit_6bit_and_dense_projections(tmp_path):
                 bits=schemes[proj].bits,
             ).T
         )
-        np.testing.assert_allclose(np.array(actual), np.array(reference), rtol=2e-4, atol=2e-4)
+        np.testing.assert_allclose(
+            np.array(actual), np.array(reference), rtol=2e-4, atol=2e-4
+        )
     streamer.close()

@@ -26,16 +26,22 @@ class Sampling:
 
     def __post_init__(self) -> None:
         if self.temperature < 0:
-            raise ValueError(f"temperature must not be negative, got {self.temperature}")
+            raise ValueError(
+                f"temperature must not be negative, got {self.temperature}"
+            )
         if not 0 < self.top_p <= 1:
             raise ValueError(f"top_p must be in (0, 1], got {self.top_p}")
         for name in ("frequency_penalty", "presence_penalty"):
             value = getattr(self, name)
             if not -PENALTY_LIMIT <= value <= PENALTY_LIMIT:
-                raise ValueError(f"{name} must be in [-{PENALTY_LIMIT}, {PENALTY_LIMIT}], got {value}")
+                raise ValueError(
+                    f"{name} must be in [-{PENALTY_LIMIT}, {PENALTY_LIMIT}], got {value}"
+                )
         for token, bias in self.logit_bias.items():
             if not -BIAS_LIMIT <= bias <= BIAS_LIMIT:
-                raise ValueError(f"logit_bias[{token}] must be in [-{BIAS_LIMIT}, {BIAS_LIMIT}], got {bias}")
+                raise ValueError(
+                    f"logit_bias[{token}] must be in [-{BIAS_LIMIT}, {BIAS_LIMIT}], got {bias}"
+                )
 
     @property
     def greedy(self) -> bool:
@@ -61,7 +67,9 @@ class Sampler:
 
     def __init__(self, sampling: Sampling | None = None) -> None:
         self.sampling = sampling or Sampling()
-        self._key = None if self.sampling.seed is None else mx.random.key(self.sampling.seed)
+        self._key = (
+            None if self.sampling.seed is None else mx.random.key(self.sampling.seed)
+        )
         self._produced: Counter[int] = Counter()
 
     def __call__(self, logits: mx.array) -> int:

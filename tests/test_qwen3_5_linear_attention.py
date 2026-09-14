@@ -20,7 +20,13 @@ qwen3_5_ref = pytest.importorskip("mlx_lm.models.qwen3_5")
 HIDDEN = 128
 GROUP_SIZE = 64
 BITS = 4
-LINEAR = LinearParams(num_key_heads=2, num_value_heads=4, key_head_dim=32, value_head_dim=32, conv_kernel_dim=4)
+LINEAR = LinearParams(
+    num_key_heads=2,
+    num_value_heads=4,
+    key_head_dim=32,
+    value_head_dim=32,
+    conv_kernel_dim=4,
+)
 
 
 def _config() -> Qwen3_5Config:
@@ -54,7 +60,9 @@ def _quantized(rng, out_dim: int, in_dim: int):
     and the dequantized dense matrix the reference gets."""
     dense = mx.array(rng.standard_normal((out_dim, in_dim)).astype(np.float32) * 0.05)
     w, scales, biases = mx.quantize(dense, group_size=GROUP_SIZE, bits=BITS)
-    effective = mx.dequantize(w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS)
+    effective = mx.dequantize(
+        w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
+    )
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -69,10 +77,15 @@ def _build_pair(seed: int):
     in_b, in_b_dense = _quantized(rng, LINEAR.num_value_heads, HIDDEN)
     out_proj, out_proj_dense = _quantized(rng, HIDDEN, LINEAR.value_dim)
 
-    conv_weight = mx.array(rng.standard_normal((qkv_dim, LINEAR.conv_kernel_dim, 1)).astype(np.float32) * 0.2)
+    conv_weight = mx.array(
+        rng.standard_normal((qkv_dim, LINEAR.conv_kernel_dim, 1)).astype(np.float32)
+        * 0.2
+    )
     A_log = mx.array(rng.standard_normal(LINEAR.num_value_heads).astype(np.float32))
     dt_bias = mx.array(rng.standard_normal(LINEAR.num_value_heads).astype(np.float32))
-    norm_weight = mx.array(rng.standard_normal(LINEAR.value_head_dim).astype(np.float32) * 0.1 + 1.0)
+    norm_weight = mx.array(
+        rng.standard_normal(LINEAR.value_head_dim).astype(np.float32) * 0.1 + 1.0
+    )
 
     ours = Qwen3_5LinearAttention(
         config,

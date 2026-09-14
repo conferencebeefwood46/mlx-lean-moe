@@ -39,11 +39,17 @@ def _write_checkpoint(model_dir, dense: tuple[str, ...] = ()) -> dict[str, np.nd
     for layer in range(NUM_LAYERS):
         for projection in PROJECTIONS:
             prefix = f"{LAYER_PREFIX}.{layer}.{STACK}.{projection}"
-            tensors[f"{prefix}.weight"] = rng.integers(0, 2**31, size=(NUM_EXPERTS, 4, 3), dtype=np.uint32)
+            tensors[f"{prefix}.weight"] = rng.integers(
+                0, 2**31, size=(NUM_EXPERTS, 4, 3), dtype=np.uint32
+            )
             if projection in dense:
                 continue
-            tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 4, 2)).astype(np.float32)
-            tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 4, 2)).astype(np.float32)
+            tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 4, 2)).astype(
+                np.float32
+            )
+            tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 4, 2)).astype(
+                np.float32
+            )
     save_file(tensors, str(model_dir / "model.safetensors"))
     return tensors
 
@@ -51,7 +57,11 @@ def _write_checkpoint(model_dir, dense: tuple[str, ...] = ()) -> dict[str, np.nd
 def _streamers(model_dir):
     index = build_index(model_dir, use_cache=False)
     original = StackedExpertStreamer(
-        model_dir, index, num_experts=NUM_EXPERTS, layer_prefix=LAYER_PREFIX, stack_name=STACK
+        model_dir,
+        index,
+        num_experts=NUM_EXPERTS,
+        layer_prefix=LAYER_PREFIX,
+        stack_name=STACK,
     )
     build(
         model_dir,
@@ -168,8 +178,12 @@ def test_a_repo_id_resolves_through_the_cache(tmp_path, monkeypatch):
 def test_an_undownloaded_repo_id_says_how_to_fetch_it(monkeypatch):
     """Rather than a bare "no such file", which reads as a bug in the path
     the user typed."""
-    monkeypatch.setattr("mlx_lean_moe.weights.download.snapshot_dir", lambda *a, **k: None)
-    with pytest.raises(FileNotFoundError, match="mlx_lean_moe.weights.download owner/name"):
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.snapshot_dir", lambda *a, **k: None
+    )
+    with pytest.raises(
+        FileNotFoundError, match="mlx_lean_moe.weights.download owner/name"
+    ):
         checkpoint_dir("owner/name")
 
 
@@ -178,7 +192,9 @@ def test_a_missing_directory_is_not_retried_as_a_repo_id(tmp_path, monkeypatch):
     path must not come back as a confusing message about the hub."""
     monkeypatch.setattr(
         "mlx_lean_moe.weights.download.snapshot_dir",
-        lambda *a, **k: pytest.fail("a filesystem path must not be looked up on the hub"),
+        lambda *a, **k: pytest.fail(
+            "a filesystem path must not be looked up on the hub"
+        ),
     )
     with pytest.raises((NotADirectoryError, FileNotFoundError)):
         checkpoint_dir(tmp_path / "absent")

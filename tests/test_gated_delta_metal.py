@@ -36,9 +36,14 @@ def _reference(inputs):
     return np.stack(output), state
 
 
-@pytest.mark.parametrize("shape", [(1, 32, 5, 3, 6), (7, 64, 32, 2, 2), (17, 128, 128, 16, 32), (129, 256, 7, 2, 6)])
+@pytest.mark.parametrize(
+    "shape",
+    [(1, 32, 5, 3, 6), (7, 64, 32, 2, 2), (17, 128, 128, 16, 32), (129, 256, 7, 2, 6)],
+)
 @pytest.mark.parametrize("strided", [False, True])
-def test_kernel_matches_float64_reference_and_preserves_input_state(shape, strided, monkeypatch):
+def test_kernel_matches_float64_reference_and_preserves_input_state(
+    shape, strided, monkeypatch
+):
     inputs = _inputs(*shape)
     if strided:
         inputs = [mx.stack([a, a], axis=-1)[..., 0] for a in inputs]
@@ -74,10 +79,15 @@ def test_long_scan_and_prefill_then_decode_preserve_carried_state():
     for actual in (whole_y, split_y):
         np.testing.assert_allclose(np.array(actual), expected_y, rtol=2e-5, atol=2e-6)
     for actual in (whole_state, state):
-        np.testing.assert_allclose(np.array(actual), expected_state, rtol=2e-5, atol=2e-6)
+        np.testing.assert_allclose(
+            np.array(actual), expected_state, rtol=2e-5, atol=2e-6
+        )
 
 
-@pytest.mark.parametrize("case", ["float16", "bfloat16", "mixed", "small_head", "cpu", "no_metal", "disabled"])
+@pytest.mark.parametrize(
+    "case",
+    ["float16", "bfloat16", "mixed", "small_head", "cpu", "no_metal", "disabled"],
+)
 def test_fallback_preserves_previous_dtype_and_results(case, monkeypatch):
     inputs = _inputs(5, key_dim=16 if case == "small_head" else 128)
     if case in ("float16", "bfloat16"):

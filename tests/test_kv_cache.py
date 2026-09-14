@@ -53,7 +53,9 @@ def test_device_memory_tracks_the_history_and_nothing_else():
     """Buffer updates are lazy, so shapes stay right either way; bytes can
     tell. Both readings follow a `gc.collect()`, being process-wide."""
     heads, dim, context = 4, 256, 2200
-    cache = GrowingKVCache(max_context=context, num_kv_heads=heads, head_dim=dim, dtype=mx.float16)
+    cache = GrowingKVCache(
+        max_context=context, num_kv_heads=heads, head_dim=dim, dtype=mx.float16
+    )
 
     def decode_step(i: int) -> None:
         token = mx.full((heads, dim), float(i), dtype=mx.float16)
@@ -83,7 +85,9 @@ def test_prefill_does_not_materialize_a_buffer_per_token():
     values = mx.random.normal((heads, prompt, dim)).astype(mx.float16)
     mx.eval(keys, values)
 
-    cache = GrowingKVCache(max_context=prompt, num_kv_heads=heads, head_dim=dim, dtype=mx.float16)
+    cache = GrowingKVCache(
+        max_context=prompt, num_kv_heads=heads, head_dim=dim, dtype=mx.float16
+    )
     gc.collect()  # same reasoning as the test above: keep collection out of the window
     baseline = mx.get_active_memory()
     for i in range(prompt):
@@ -94,7 +98,9 @@ def test_prefill_does_not_materialize_a_buffer_per_token():
     # Two buffers of 4*512*256*2 bytes = 1 MB each. Anything close to
     # prompt-many buffers would be hundreds of megabytes.
     grown = mx.get_active_memory() - baseline
-    assert grown <= 8 * 2**20, f"a {prompt}-token prefill added {grown / 2**20:.1f} MB; the cache itself is 2 MB"
+    assert grown <= 8 * 2**20, (
+        f"a {prompt}-token prefill added {grown / 2**20:.1f} MB; the cache itself is 2 MB"
+    )
 
 
 def test_allocation_follows_used_context():
@@ -121,7 +127,9 @@ def test_failed_batch_append_leaves_history_unchanged():
     cache = GrowingKVCache(3, NUM_KV_HEADS, HEAD_DIM)
     cache.append(_token(1), _token(2))
     with pytest.raises(IndexError):
-        cache.append_many(mx.zeros((NUM_KV_HEADS, 3, HEAD_DIM)), mx.zeros((NUM_KV_HEADS, 3, HEAD_DIM)))
+        cache.append_many(
+            mx.zeros((NUM_KV_HEADS, 3, HEAD_DIM)), mx.zeros((NUM_KV_HEADS, 3, HEAD_DIM))
+        )
     assert cache.size == 1
     keys, values = cache.state()
     assert mx.array_equal(keys[:, 0], _token(1)).item()

@@ -25,7 +25,13 @@ N_KV_HEADS = 2
 HEAD_DIM = 32
 ROTARY_DIM = 8  # partial_rotary_factor 0.25
 ROPE_THETA = 10000000.0
-LINEAR = LinearParams(num_key_heads=2, num_value_heads=4, key_head_dim=32, value_head_dim=32, conv_kernel_dim=4)
+LINEAR = LinearParams(
+    num_key_heads=2,
+    num_value_heads=4,
+    key_head_dim=32,
+    value_head_dim=32,
+    conv_kernel_dim=4,
+)
 
 
 def _config() -> Qwen3_5Config:
@@ -57,7 +63,9 @@ def _config() -> Qwen3_5Config:
 def _quantized(rng, out_dim: int, in_dim: int):
     dense = mx.array(rng.standard_normal((out_dim, in_dim)).astype(np.float32) * 0.05)
     w, scales, biases = mx.quantize(dense, group_size=GROUP_SIZE, bits=BITS)
-    effective = mx.dequantize(w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS)
+    effective = mx.dequantize(
+        w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
+    )
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -91,7 +99,11 @@ def _build_pair(seed: int):
         num_key_value_heads=N_KV_HEADS,
         head_dim=HEAD_DIM,
         rms_norm_eps=1e-6,
-        rope_parameters={"rope_type": "default", "rope_theta": ROPE_THETA, "partial_rotary_factor": 0.25},
+        rope_parameters={
+            "rope_type": "default",
+            "rope_theta": ROPE_THETA,
+            "partial_rotary_factor": 0.25,
+        },
     )
     ref = qwen3_next_ref.Qwen3NextAttention(args)
     ref.q_proj.weight = q_dense
@@ -109,7 +121,9 @@ def test_matches_mlx_lm_attention(seq_len):
     rng = np.random.default_rng(200)
     x = mx.array(rng.standard_normal((seq_len, HIDDEN)).astype(np.float32))
 
-    cache = GrowingKVCache(max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32)
+    cache = GrowingKVCache(
+        max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32
+    )
     got = ours(x, cache)
 
     ref_cache = mlx_lm_cache.KVCache()
@@ -125,8 +139,15 @@ def test_decode_steps_match_a_batched_prefill():
     rng = np.random.default_rng(201)
     x = mx.array(rng.standard_normal((5, HIDDEN)).astype(np.float32))
 
-    batched = ours(x, GrowingKVCache(max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32))
-    cache = GrowingKVCache(max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32)
+    batched = ours(
+        x,
+        GrowingKVCache(
+            max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32
+        ),
+    )
+    cache = GrowingKVCache(
+        max_context=16, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32
+    )
     stepwise = mx.stack([ours(x[t], cache) for t in range(x.shape[0])])
 
     mx.eval(batched, stepwise)
@@ -140,7 +161,12 @@ def test_output_gate_actually_gates():
     rng = np.random.default_rng(202)
     x = mx.array(rng.standard_normal((1, HIDDEN)).astype(np.float32))
 
-    gated = ours(x, GrowingKVCache(max_context=4, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32))
+    gated = ours(
+        x,
+        GrowingKVCache(
+            max_context=4, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32
+        ),
+    )
 
     # Rebuild with the gate half of q_proj forced to zero.
     dense = mx.dequantize(
@@ -154,7 +180,12 @@ def test_output_gate_actually_gates():
     zeroed = mx.concatenate([dense[:half], mx.zeros_like(dense[half:])], axis=0)
     w, scales, biases = mx.quantize(zeroed, group_size=GROUP_SIZE, bits=BITS)
     ours.q_proj = {"weight": w, "scales": scales, "biases": biases}
-    ungated = ours(x, GrowingKVCache(max_context=4, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32))
+    ungated = ours(
+        x,
+        GrowingKVCache(
+            max_context=4, num_kv_heads=N_KV_HEADS, head_dim=HEAD_DIM, dtype=mx.float32
+        ),
+    )
 
     mx.eval(gated, ungated)
     assert not mx.allclose(gated, ungated, atol=1e-3).item()

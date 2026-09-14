@@ -33,13 +33,22 @@ class FakeEngine:
         return None
 
     def generate(self, messages, max_tokens, stop, sampling=None):
-        self.seen.append({"messages": messages, "max_tokens": max_tokens, "stop": stop, "sampling": sampling})
+        self.seen.append(
+            {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "stop": stop,
+                "sampling": sampling,
+            }
+        )
         with self._lock:
             self.concurrent += 1
             self.max_concurrent = max(self.max_concurrent, self.concurrent)
         try:
             for piece in self.pieces:
-                time.sleep(0.01)  # long enough for a second request to overlap if it could
+                time.sleep(
+                    0.01
+                )  # long enough for a second request to overlap if it could
                 yield piece, None
             yield "", self.finish
         finally:
@@ -61,7 +70,9 @@ def server():
 
 def _post(port, body, path="/v1/chat/completions"):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    connection.request("POST", path, json.dumps(body), {"Content-Type": "application/json"})
+    connection.request(
+        "POST", path, json.dumps(body), {"Content-Type": "application/json"}
+    )
     return connection, connection.getresponse()
 
 
@@ -96,24 +107,33 @@ def test_streaming_sends_deltas_and_terminates(server):
     """Clients read this incrementally, so the framing is the contract: one
     `data:` line per chunk, a blank line between, and `[DONE]` at the end."""
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "stream": True})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "stream": True}
+    )
     raw = response.read().decode()
     connection.close()
 
     assert response.getheader("Content-Type") == "text/event-stream"
     assert raw.endswith("data: [DONE]\n\n")
 
-    events = [line[len("data: ") :] for line in raw.split("\n\n") if line.startswith("data: ")]
+    events = [
+        line[len("data: ") :] for line in raw.split("\n\n") if line.startswith("data: ")
+    ]
     parsed = [json.loads(e) for e in events if e != "[DONE]"]
     assert parsed[0]["choices"][0]["delta"]["role"] == "assistant"
-    assert "".join(p["choices"][0]["delta"].get("content", "") for p in parsed) == "Hello, world"
+    assert (
+        "".join(p["choices"][0]["delta"].get("content", "") for p in parsed)
+        == "Hello, world"
+    )
     assert parsed[-1]["choices"][0]["finish_reason"] == "stop"
     assert {p["object"] for p in parsed} == {"chat.completion.chunk"}
 
 
 def test_max_tokens_defaults_when_the_client_names_none(server):
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}]})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}]}
+    )
     response.read()
     connection.close()
     assert engine.seen[0]["max_tokens"] > 0
@@ -122,7 +142,9 @@ def test_max_tokens_defaults_when_the_client_names_none(server):
 def test_a_string_stop_is_taken_as_a_list(server):
     """The API allows either, and clients use both."""
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "stop": "###"})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "stop": "###"}
+    )
     response.read()
     connection.close()
     assert engine.seen[0]["stop"] == ["###"]
@@ -137,8 +159,12 @@ def test_concurrent_requests_all_get_answered(server):
 
     def ask():
         try:
-            connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}]})
-            answers.append(json.loads(response.read())["choices"][0]["message"]["content"])
+            connection, response = _post(
+                port, {"messages": [{"role": "user", "content": "hi"}]}
+            )
+            answers.append(
+                json.loads(response.read())["choices"][0]["message"]["content"]
+            )
             connection.close()
         except Exception as exc:  # noqa: BLE001 - reported, not swallowed
             errors.append(exc)
@@ -174,7 +200,12 @@ def test_an_unknown_route_is_a_404(server):
 def test_malformed_json_is_refused_rather_than_crashing(server):
     _, _, port = server
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    connection.request("POST", "/v1/chat/completions", "{not json", {"Content-Type": "application/json"})
+    connection.request(
+        "POST",
+        "/v1/chat/completions",
+        "{not json",
+        {"Content-Type": "application/json"},
+    )
     response = connection.getresponse()
     assert response.status == 400
     response.read()
@@ -290,7 +321,10 @@ def test_engine_does_not_stream_the_start_of_a_stop_sequence(make_engine):
     """Tokens "a", "#", "#" against a "##" stop: sending the first "#" as it
     arrives puts half the forbidden sequence in front of the client."""
     engine = make_engine([5, 6, 7, 8], {5: "a", 6: "#", 7: "#", 8: "b"})
-    pieces = [text for text, _ in engine.generate([{"role": "user", "content": "hi"}], 10, ["##"])]
+    pieces = [
+        text
+        for text, _ in engine.generate([{"role": "user", "content": "hi"}], 10, ["##"])
+    ]
     assert "".join(pieces) == "a"
     assert all("#" not in piece for piece in pieces)
 
@@ -306,7 +340,9 @@ def test_engine_holds_nothing_back_without_stop_sequences(make_engine):
     """The common case: no stops asked for, so every character goes out as
     soon as it decodes rather than waiting behind a hold that cannot apply."""
     engine = make_engine([5, 6, 7], {5: "a", 6: "b", 7: "c"})
-    pieces = [t for t, _ in engine.generate([{"role": "user", "content": "hi"}], 3, []) if t]
+    pieces = [
+        t for t, _ in engine.generate([{"role": "user", "content": "hi"}], 3, []) if t
+    ]
     assert pieces == ["a", "b", "c"]
 
 
@@ -331,7 +367,10 @@ def test_the_engine_runs_one_generation_at_a_time(make_engine):
                 depth -= 1
 
     engine.session.send = counting_send
-    threads = [threading.Thread(target=lambda: _collect(engine, max_tokens=4, stop=[])) for _ in range(3)]
+    threads = [
+        threading.Thread(target=lambda: _collect(engine, max_tokens=4, stop=[]))
+        for _ in range(3)
+    ]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -362,7 +401,9 @@ def test_every_published_end_of_turn_token_stops_generation(tmp_path):
     class _Tok:
         eos_token_id = 7
 
-    (tmp_path / "generation_config.json").write_text(json.dumps({"eos_token_id": [11, 12]}))
+    (tmp_path / "generation_config.json").write_text(
+        json.dumps({"eos_token_id": [11, 12]})
+    )
     assert _stop_token_ids(tmp_path, _Tok()) == {11, 12}
 
     (tmp_path / "generation_config.json").write_text(json.dumps({"eos_token_id": 11}))
@@ -427,7 +468,9 @@ def test_sampling_parameters_reach_the_engine(server):
 
 def test_a_request_naming_no_sampling_stays_greedy(server):
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}]})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}]}
+    )
     response.read()
     connection.close()
     assert engine.seen[0]["sampling"].greedy
@@ -435,7 +478,9 @@ def test_a_request_naming_no_sampling_stays_greedy(server):
 
 def test_an_impossible_sampling_setting_is_refused(server):
     _, _, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "top_p": 1.5})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "top_p": 1.5}
+    )
     payload = json.loads(response.read())
     connection.close()
     assert response.status == 400
@@ -443,8 +488,14 @@ def test_an_impossible_sampling_setting_is_refused(server):
 
 
 def _cache(monkeypatch, complete, whole=()):
-    monkeypatch.setattr("mlx_lean_moe.weights.download.cached_checkpoints", lambda *a, **k: list(complete))
-    monkeypatch.setattr("mlx_lean_moe.weights.download.is_complete", lambda repo_id, *a, **k: repo_id in whole)
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.cached_checkpoints",
+        lambda *a, **k: list(complete),
+    )
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.is_complete",
+        lambda repo_id, *a, **k: repo_id in whole,
+    )
 
 
 def test_one_downloaded_checkpoint_needs_no_flag(monkeypatch):
@@ -504,7 +555,10 @@ def test_logit_bias_keys_arrive_as_strings_and_become_token_ids(server):
     """JSON has no integer keys, so a client's `{"7": -100}` must not end up
     indexing the vocabulary with the string."""
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "logit_bias": {"7": -100}})
+    connection, response = _post(
+        port,
+        {"messages": [{"role": "user", "content": "hi"}], "logit_bias": {"7": -100}},
+    )
     response.read()
     connection.close()
     assert list(engine.seen[0]["sampling"].logit_bias) == [7]
@@ -524,7 +578,9 @@ def test_logit_bias_keys_arrive_as_strings_and_become_token_ids(server):
 )
 def test_impossible_values_are_refused_with_the_field_named(server, body, expected):
     _, _, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], **body})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], **body}
+    )
     payload = json.loads(response.read())
     connection.close()
     assert response.status == 400
@@ -533,18 +589,24 @@ def test_impossible_values_are_refused_with_the_field_named(server, body, expect
 
 def test_n_returns_that_many_choices_each_with_its_own_index(server):
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "n": 3})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "n": 3}
+    )
     body = json.loads(response.read())
     connection.close()
 
     assert [choice["index"] for choice in body["choices"]] == [0, 1, 2]
-    assert all(choice["message"]["content"] == "Hello, world" for choice in body["choices"])
+    assert all(
+        choice["message"]["content"] == "Hello, world" for choice in body["choices"]
+    )
     assert len(engine.seen) == 3
 
 
 def test_n_streams_each_choice_under_its_own_index(server):
     _, _, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "n": 2, "stream": True})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "n": 2, "stream": True}
+    )
     chunks = [
         json.loads(line[len("data: ") :])
         for line in response.read().decode().splitlines()
@@ -556,7 +618,10 @@ def test_n_streams_each_choice_under_its_own_index(server):
     assert indexes == {0, 1}
     for index in (0, 1):
         mine = [c for c in chunks if c["choices"][0]["index"] == index]
-        assert "".join(c["choices"][0]["delta"].get("content", "") for c in mine) == "Hello, world"
+        assert (
+            "".join(c["choices"][0]["delta"].get("content", "") for c in mine)
+            == "Hello, world"
+        )
         assert mine[-1]["choices"][0]["finish_reason"] == "stop"
 
 
@@ -564,7 +629,13 @@ def test_a_seeded_request_gives_each_choice_a_different_seed(server):
     """Otherwise `n` returns the same completion `n` times."""
     _, engine, port = server
     connection, response = _post(
-        port, {"messages": [{"role": "user", "content": "hi"}], "n": 3, "temperature": 1.0, "seed": 5}
+        port,
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "n": 3,
+            "temperature": 1.0,
+            "seed": 5,
+        },
     )
     response.read()
     connection.close()
@@ -573,7 +644,14 @@ def test_a_seeded_request_gives_each_choice_a_different_seed(server):
 
 def test_one_choice_is_the_default_and_leaves_the_seed_alone(server):
     _, engine, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "temperature": 1.0, "seed": 5})
+    connection, response = _post(
+        port,
+        {
+            "messages": [{"role": "user", "content": "hi"}],
+            "temperature": 1.0,
+            "seed": 5,
+        },
+    )
     response.read()
     connection.close()
     assert len(engine.seen) == 1
@@ -602,7 +680,9 @@ def test_a_streamed_seeded_request_also_moves_the_seed_per_choice(server):
 def test_a_streamed_choice_opens_with_a_role_and_closes_with_a_reason(server):
     """What a client needs to start and finish each choice separately."""
     _, _, port = server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "n": 2, "stream": True})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "n": 2, "stream": True}
+    )
     chunks = [
         json.loads(line[len("data: ") :])
         for line in response.read().decode().splitlines()
@@ -640,7 +720,9 @@ def test_a_prompt_over_the_context_is_refused_before_anything_is_sent(cramped_se
     """By the time the model raises, a streamed response has sent its
     headers and cannot say why it stopped."""
     _, engine, port = cramped_server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}]})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}]}
+    )
     payload = json.loads(response.read())
     connection.close()
 
@@ -653,7 +735,9 @@ def test_a_streamed_request_over_the_context_is_refused_too(cramped_server):
     """The streaming path sends its headers first, so the check has to come
     before it, not inside it."""
     _, engine, port = cramped_server
-    connection, response = _post(port, {"messages": [{"role": "user", "content": "hi"}], "stream": True})
+    connection, response = _post(
+        port, {"messages": [{"role": "user", "content": "hi"}], "stream": True}
+    )
     payload = response.read()
     connection.close()
 

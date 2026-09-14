@@ -47,7 +47,9 @@ class ChatSession:
         self.config = config
         self.max_context = max_context
         self.expert_cache_size_per_layer = expert_cache_size_per_layer
-        self.model = _build_model(model_dir, config, max_context, expert_cache_size_per_layer)
+        self.model = _build_model(
+            model_dir, config, max_context, expert_cache_size_per_layer
+        )
         self._committed: list[int] = []
         self._logits: mx.array | None = None
         self.last_prefill_len = 0
@@ -98,7 +100,9 @@ class ChatSession:
             self._logits = self.model.prefill(new_suffix)
             self._committed = list(token_ids)
         elif self._logits is None:
-            raise ValueError("ChatSession.send() got no new tokens and there's no prior turn to continue")
+            raise ValueError(
+                "ChatSession.send() got no new tokens and there's no prior turn to continue"
+            )
 
         pick = Sampler(sampling)
 
@@ -133,5 +137,9 @@ def generate(
     """One turn through a fresh :class:`ChatSession`, closed afterwards; use
     `ChatSession` itself to reuse the cache across turns."""
     max_context = max_context or (len(prompt_tokens) + max_new_tokens)
-    with ChatSession(model_dir, config, max_context, expert_cache_size_per_layer) as session:
-        yield from session.send(prompt_tokens, max_new_tokens, clear_cache_every, sampling)
+    with ChatSession(
+        model_dir, config, max_context, expert_cache_size_per_layer
+    ) as session:
+        yield from session.send(
+            prompt_tokens, max_new_tokens, clear_cache_every, sampling
+        )

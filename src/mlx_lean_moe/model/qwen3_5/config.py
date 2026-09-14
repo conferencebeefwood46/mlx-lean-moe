@@ -83,13 +83,17 @@ def _quant_scheme(quant: dict, bits: int = 4, group_size: int = 64) -> QuantSche
     )
 
 
-def _quant_overrides(quant: dict, default: QuantScheme) -> tuple[tuple[str, QuantScheme], ...]:
+def _quant_overrides(
+    quant: dict, default: QuantScheme
+) -> tuple[tuple[str, QuantScheme], ...]:
     overrides = []
     for name, value in quant.items():
         if isinstance(value, dict):
             overrides.append(
                 (
-                    name.removesuffix(".weight").removesuffix(".scales").removesuffix(".biases"),
+                    name.removesuffix(".weight")
+                    .removesuffix(".scales")
+                    .removesuffix(".biases"),
                     QuantScheme(
                         bits=int(value.get("bits", default.bits)),
                         group_size=int(value.get("group_size", default.group_size)),
@@ -120,7 +124,10 @@ def _layer_types(text: dict, num_layers: int) -> list[str]:
     # Fallback matching the reference implementation's own rule: a layer is
     # linear unless it's the last of each `full_attention_interval` group.
     interval = int(text.get("full_attention_interval", 4))
-    return ["full_attention" if (i + 1) % interval == 0 else "linear_attention" for i in range(num_layers)]
+    return [
+        "full_attention" if (i + 1) % interval == 0 else "linear_attention"
+        for i in range(num_layers)
+    ]
 
 
 def from_hf_config(hf_config: dict) -> Qwen3_5Config:
@@ -138,14 +145,21 @@ def from_hf_config(hf_config: dict) -> Qwen3_5Config:
             f"qwen3_5 config has decoder_sparse_step={text['decoder_sparse_step']!r}; only every-layer MoE (1) is implemented"
         )
     if not int(text.get("num_experts", 0)):
-        raise ValueError("qwen3_5 config has no experts -- this is a dense checkpoint, out of scope for this project")
+        raise ValueError(
+            "qwen3_5 config has no experts -- this is a dense checkpoint, out of scope for this project"
+        )
 
     layer_types = _layer_types(text, num_layers)
     is_linear_per_layer = tuple(lt == "linear_attention" for lt in layer_types)
 
     rope = text.get("rope_parameters") or hf_config.get("rope_parameters") or {}
-    head_dim = int(text.get("head_dim") or (int(text["hidden_size"]) // int(text["num_attention_heads"])))
-    partial_rotary_factor = float(rope.get("partial_rotary_factor", hf_config.get("partial_rotary_factor", 1.0)))
+    head_dim = int(
+        text.get("head_dim")
+        or (int(text["hidden_size"]) // int(text["num_attention_heads"]))
+    )
+    partial_rotary_factor = float(
+        rope.get("partial_rotary_factor", hf_config.get("partial_rotary_factor", 1.0))
+    )
 
     quant = hf_config.get("quantization") or hf_config.get("quantization_config") or {}
     default_quant = _quant_scheme(quant)
@@ -177,7 +191,9 @@ def from_hf_config(hf_config: dict) -> Qwen3_5Config:
         norm_topk_prob=bool(text.get("norm_topk_prob", True)),
         expert_quant=default_quant,
         router_quant=_quant_override(quant, ".mlp.gate", default_quant),
-        shared_gate_quant=_quant_override(quant, ".mlp.shared_expert_gate", default_quant),
+        shared_gate_quant=_quant_override(
+            quant, ".mlp.shared_expert_gate", default_quant
+        ),
         other_quant=default_quant,
         quant_overrides=_quant_overrides(quant, default_quant),
     )

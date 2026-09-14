@@ -49,19 +49,33 @@ class GrowingKVCache:
         """Append a head-major ``(heads, tokens, dim)`` batch in two writes,
         checked before either buffer is touched."""
         if keys.ndim != 3 or values.shape != keys.shape:
-            raise ValueError("keys and values must have matching (heads, tokens, dim) shapes")
+            raise ValueError(
+                "keys and values must have matching (heads, tokens, dim) shapes"
+            )
         if keys.shape[0] != self._keys.shape[0] or keys.shape[2] != self._keys.shape[2]:
-            raise ValueError("keys and values do not match the cache head count or dimension")
+            raise ValueError(
+                "keys and values do not match the cache head count or dimension"
+            )
         end = self._written + keys.shape[1]
         if end > self.capacity:
-            raise IndexError(f"GrowingKVCache exceeded its capacity of {self.capacity} tokens")
+            raise IndexError(
+                f"GrowingKVCache exceeded its capacity of {self.capacity} tokens"
+            )
         if end == self._written:
             return
         if end > self.allocated_size:
             allocated = min(self.capacity, ((end + 255) // 256) * 256)
-            shape = (self._keys.shape[0], allocated - self.allocated_size, self._keys.shape[2])
-            self._keys = mx.concatenate([self._keys, mx.zeros(shape, dtype=self._keys.dtype)], axis=1)
-            self._values = mx.concatenate([self._values, mx.zeros(shape, dtype=self._values.dtype)], axis=1)
+            shape = (
+                self._keys.shape[0],
+                allocated - self.allocated_size,
+                self._keys.shape[2],
+            )
+            self._keys = mx.concatenate(
+                [self._keys, mx.zeros(shape, dtype=self._keys.dtype)], axis=1
+            )
+            self._values = mx.concatenate(
+                [self._values, mx.zeros(shape, dtype=self._values.dtype)], axis=1
+            )
         self._keys[:, self._written : end, :] = keys
         self._values[:, self._written : end, :] = values
         self._written = end

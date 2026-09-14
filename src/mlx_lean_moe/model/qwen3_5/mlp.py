@@ -10,7 +10,11 @@ from collections.abc import Callable
 import mlx.core as mx
 import mlx.nn as nn
 
-from mlx_lean_moe.model.moe_block import LinearWeights, QuantizedTensor, quantized_linear
+from mlx_lean_moe.model.moe_block import (
+    LinearWeights,
+    QuantizedTensor,
+    quantized_linear,
+)
 from mlx_lean_moe.model.qwen3_5.config import Qwen3_5Config
 from mlx_lean_moe.weights.expert_loader import CachedExpertLoader
 
@@ -19,7 +23,9 @@ def _swiglu(gate: mx.array, up: mx.array) -> mx.array:
     return nn.silu(gate) * up
 
 
-def swiglu_mlp(x: mx.array, tensors: dict[str, LinearWeights | QuantizedTensor], quant=None) -> mx.array:
+def swiglu_mlp(
+    x: mx.array, tensors: dict[str, LinearWeights | QuantizedTensor], quant=None
+) -> mx.array:
     """``x``: ``(hidden_size,)`` or ``(L, hidden_size)``; returns the same
     rank. Used for the shared expert."""
     squeeze = x.ndim == 1
@@ -59,7 +65,9 @@ class Qwen3_5Experts:
     """The routed experts, streamed on demand: the same weighted sum of
     per-expert SwiGLU MLPs the reference computes over a resident tensor."""
 
-    def __init__(self, config: Qwen3_5Config, layer_index: int, expert_loader: CachedExpertLoader) -> None:
+    def __init__(
+        self, config: Qwen3_5Config, layer_index: int, expert_loader: CachedExpertLoader
+    ) -> None:
         self.config = config
         self.layer_index = layer_index
         self.expert_loader = expert_loader
@@ -110,9 +118,15 @@ class Qwen3_5Experts:
         return out[0] if squeeze else out
 
     def _through_expert(self, tensors: dict, taken: mx.array) -> mx.array:
-        gate = quantized_linear(taken, tensors["gate_proj"], self.projection_quant["gate_proj"])
-        up = quantized_linear(taken, tensors["up_proj"], self.projection_quant["up_proj"])
-        return quantized_linear(_swiglu(gate, up), tensors["down_proj"], self.projection_quant["down_proj"])
+        gate = quantized_linear(
+            taken, tensors["gate_proj"], self.projection_quant["gate_proj"]
+        )
+        up = quantized_linear(
+            taken, tensors["up_proj"], self.projection_quant["up_proj"]
+        )
+        return quantized_linear(
+            _swiglu(gate, up), tensors["down_proj"], self.projection_quant["down_proj"]
+        )
 
 
 class Qwen3_5SharedExpert:

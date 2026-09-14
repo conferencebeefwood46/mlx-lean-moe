@@ -52,7 +52,9 @@ def repo_dir(repo_id: str, root: Path | None = None) -> Path:
     return _hub_root(root) / ("models--" + repo_id.replace("/", "--"))
 
 
-def snapshot_dir(repo_id: str, root: Path | None = None, revision: str | None = None) -> Path | None:
+def snapshot_dir(
+    repo_id: str, root: Path | None = None, revision: str | None = None
+) -> Path | None:
     """The directory of files for a revision, or None when it is not cached."""
     repo = repo_dir(repo_id, root)
     commit = revision or "main"
@@ -91,7 +93,9 @@ def repo_files(repo_id: str, revision: str | None = None) -> list[RemoteFile]:
     hours of shard downloading rather than after."""
     info = HfApi().model_info(repo_id, revision=revision, files_metadata=True)
     files = [
-        RemoteFile(s.rfilename, s.size, getattr(getattr(s, "lfs", None), "sha256", None))
+        RemoteFile(
+            s.rfilename, s.size, getattr(getattr(s, "lfs", None), "sha256", None)
+        )
         for s in info.siblings
         if s.size is not None and not s.rfilename.startswith(".")
     ]
@@ -176,7 +180,9 @@ def _fetch_range(
             last_error = exc
 
     have = out.stat().st_size if out.exists() else 0
-    raise RuntimeError(f"{out.name}: got {have}/{want} bytes after {attempts} attempts (last error: {last_error})")
+    raise RuntimeError(
+        f"{out.name}: got {have}/{want} bytes after {attempts} attempts (last error: {last_error})"
+    )
 
 
 def _download_file(
@@ -193,14 +199,17 @@ def _download_file(
 
     target.parent.mkdir(parents=True, exist_ok=True)
     ranges = [
-        (start, min(start + chunk_size - 1, remote.size - 1)) for start in range(0, max(remote.size, 1), chunk_size)
+        (start, min(start + chunk_size - 1, remote.size - 1))
+        for start in range(0, max(remote.size, 1), chunk_size)
     ]
 
     if len(ranges) == 1:
         _fetch_range(client, url, target, 0, remote.size - 1, on_bytes=on_bytes)
         parts: list[Path] = []
     else:
-        parts = _fetch_in_parts(client, url, target, remote, ranges, connections, on_bytes)
+        parts = _fetch_in_parts(
+            client, url, target, remote, ranges, connections, on_bytes
+        )
 
     _verify(target, remote)
     for part in parts:
@@ -218,7 +227,9 @@ def _fetch_in_parts(
 ) -> list[Path]:
     parts_dir = target.parent / ".parts"
     parts_dir.mkdir(parents=True, exist_ok=True)
-    parts = [parts_dir / f"{Path(remote.name).name}.{i:04d}" for i in range(len(ranges))]
+    parts = [
+        parts_dir / f"{Path(remote.name).name}.{i:04d}" for i in range(len(ranges))
+    ]
 
     with ThreadPoolExecutor(max_workers=connections) as pool:
         futures = [
@@ -231,7 +242,9 @@ def _fetch_in_parts(
     for part, (start, end) in zip(parts, ranges):
         actual = part.stat().st_size
         if actual != end - start + 1:
-            raise RuntimeError(f"{part.name}: {actual} bytes, expected {end - start + 1}")
+            raise RuntimeError(
+                f"{part.name}: {actual} bytes, expected {end - start + 1}"
+            )
 
     with open(target, "wb") as out:
         for part in parts:
@@ -242,14 +255,18 @@ def _fetch_in_parts(
 def _verify(target: Path, remote: RemoteFile) -> None:
     size = target.stat().st_size
     if size != remote.size:
-        raise RuntimeError(f"{remote.name}: assembled {size} bytes, expected {remote.size}")
+        raise RuntimeError(
+            f"{remote.name}: assembled {size} bytes, expected {remote.size}"
+        )
     # Size alone passed for parts that held the wrong content at a plausible
     # length, so the published hash is checked whenever there is one.
     if remote.sha256:
         digest = sha256_of(target)
         if digest != remote.sha256:
             target.unlink()
-            raise RuntimeError(f"{remote.name}: sha256 {digest[:12]}... != published {remote.sha256[:12]}...")
+            raise RuntimeError(
+                f"{remote.name}: sha256 {digest[:12]}... != published {remote.sha256[:12]}..."
+            )
 
 
 def _link(snapshot: Path, name: str, blob: Path) -> None:
@@ -284,7 +301,9 @@ def download_repo(
     snapshot.mkdir(parents=True, exist_ok=True)
 
     total_bytes = sum(f.size for f in remote_files)
-    done_bytes = sum(f.size for f in remote_files if _already_whole(snapshot / f.name, f.size))
+    done_bytes = sum(
+        f.size for f in remote_files if _already_whole(snapshot / f.name, f.size)
+    )
     lock = threading.Lock()
     current = ""
 
@@ -304,7 +323,9 @@ def download_repo(
             # An LFS blob's name is known up front; anything else is hashed
             # once whole, so it lands under a temporary name first.
             settled = blobs / remote.sha256 if remote.sha256 else None
-            target = settled or (repo / ".parts" / f"{remote.name.replace('/', '--')}.incoming")
+            target = settled or (
+                repo / ".parts" / f"{remote.name.replace('/', '--')}.incoming"
+            )
             target.parent.mkdir(parents=True, exist_ok=True)
 
             _download_file(
@@ -341,7 +362,9 @@ def _already_whole(path: Path, size: int) -> bool:
         return False
 
 
-def is_complete(repo_id: str, root: Path | None = None, revision: str | None = None) -> bool:
+def is_complete(
+    repo_id: str, root: Path | None = None, revision: str | None = None
+) -> bool:
     """Whether the repo is cached and whole, answered from local bytes since
     this runs on every startup; the hub is asked only if they fall short."""
     snapshot = snapshot_dir(repo_id, root, revision)
@@ -349,7 +372,10 @@ def is_complete(repo_id: str, root: Path | None = None, revision: str | None = N
         return False
     if not (snapshot / "config.json").exists():
         return False
-    if not any((snapshot / name).exists() for name in ("tokenizer.json", "tokenizer_config.json")):
+    if not any(
+        (snapshot / name).exists()
+        for name in ("tokenizer.json", "tokenizer_config.json")
+    ):
         return False
 
     parts_dir = repo_dir(repo_id, root) / ".parts"
@@ -422,7 +448,10 @@ class DownloadProgress:
             fraction = done / total if total else 1.0
             if fraction - self._last_logged >= self._LOG_STEP or done >= total:
                 self._last_logged = fraction
-                print(f"  {fraction:5.1%}  {_human_size(done)}/{_human_size(total)}  {name}", file=self._stream)
+                print(
+                    f"  {fraction:5.1%}  {_human_size(done)}/{_human_size(total)}  {name}",
+                    file=self._stream,
+                )
             return
 
         if now - self._last_draw < self._MIN_INTERVAL and done < total:
@@ -442,7 +471,11 @@ class DownloadProgress:
     def _draw(self, name: str, done: int, total: int) -> None:
         fraction = done / total if total else 1.0
         rate = self._rate()
-        eta = f"eta {_duration((total - done) / rate)}" if rate > 0 and done < total else "eta --"
+        eta = (
+            f"eta {_duration((total - done) / rate)}"
+            if rate > 0 and done < total
+            else "eta --"
+        )
         # Padded to the widest form of each field: nothing left of the
         # filename shifts as the numbers change.
         stats = f"{fraction:6.1%} {_human_size(done):>6}/{_human_size(total):<6} {rate / 2**20:5.1f} MB/s {eta:<9}"
@@ -485,7 +518,13 @@ def fetch(
 
     bar = DownloadProgress(stream)
     try:
-        return download_repo(repo_id, root=root, revision=revision, connections=connections, on_progress=bar.update)
+        return download_repo(
+            repo_id,
+            root=root,
+            revision=revision,
+            connections=connections,
+            on_progress=bar.update,
+        )
     finally:
         bar.close()
 
@@ -496,12 +535,23 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         description="Download a checkpoint from the Hugging Face hub into its cache, over many connections at once."
     )
-    parser.add_argument("repo_id", help="for example froggeric/Qwen3.6-35B-A3B-...-MLX-4bit")
-    parser.add_argument("--revision", default=None, help="branch or commit (default: main)")
-    parser.add_argument("--connections", type=int, default=DEFAULT_CONNECTIONS, help=f"default {DEFAULT_CONNECTIONS}")
+    parser.add_argument(
+        "repo_id", help="for example froggeric/Qwen3.6-35B-A3B-...-MLX-4bit"
+    )
+    parser.add_argument(
+        "--revision", default=None, help="branch or commit (default: main)"
+    )
+    parser.add_argument(
+        "--connections",
+        type=int,
+        default=DEFAULT_CONNECTIONS,
+        help=f"default {DEFAULT_CONNECTIONS}",
+    )
     arguments = parser.parse_args()
 
-    path = fetch(arguments.repo_id, arguments.revision, connections=arguments.connections)
+    path = fetch(
+        arguments.repo_id, arguments.revision, connections=arguments.connections
+    )
     print(path)
 
 

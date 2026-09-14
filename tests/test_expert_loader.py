@@ -7,7 +7,11 @@ import numpy as np
 import pytest
 from safetensors.numpy import save_file
 
-from mlx_lean_moe.weights.expert_loader import CachedExpertLoader, TensorStreamer, decode_tensor
+from mlx_lean_moe.weights.expert_loader import (
+    CachedExpertLoader,
+    TensorStreamer,
+    decode_tensor,
+)
 from mlx_lean_moe.weights.safetensors_index import build_index
 from mlx_lean_moe.weights.stacked_expert_loader import StackedExpertStreamer
 
@@ -26,19 +30,29 @@ def _write_checkpoint(model_dir, num_layers=1):
     for layer in range(num_layers):
         for proj in PROJECTIONS:
             prefix = f"{LAYER_PREFIX}.{layer}.experts.switch_glu.{proj}"
-            all_tensors[f"{prefix}.weight"] = rng.integers(0, 255, size=(NUM_EXPERTS, 8, 4), dtype=np.uint8)
-            all_tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 8, 1)).astype(np.float32)
-            all_tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 8, 1)).astype(np.float32)
+            all_tensors[f"{prefix}.weight"] = rng.integers(
+                0, 255, size=(NUM_EXPERTS, 8, 4), dtype=np.uint8
+            )
+            all_tensors[f"{prefix}.scales"] = rng.random((NUM_EXPERTS, 8, 1)).astype(
+                np.float32
+            )
+            all_tensors[f"{prefix}.biases"] = rng.random((NUM_EXPERTS, 8, 1)).astype(
+                np.float32
+            )
     save_file(all_tensors, str(model_dir / "model.safetensors"))
     return all_tensors
 
 
 def _streamer_for(model_dir) -> StackedExpertStreamer:
     index = build_index(model_dir, use_cache=False)
-    return StackedExpertStreamer(model_dir, index, num_experts=NUM_EXPERTS, layer_prefix=LAYER_PREFIX)
+    return StackedExpertStreamer(
+        model_dir, index, num_experts=NUM_EXPERTS, layer_prefix=LAYER_PREFIX
+    )
 
 
-def _write_raw_safetensors(path, entries: dict[str, tuple[str, tuple[int, ...], bytes]]) -> None:
+def _write_raw_safetensors(
+    path, entries: dict[str, tuple[str, tuple[int, ...], bytes]]
+) -> None:
     """A minimal safetensors file for dtypes `safetensors.numpy` cannot
     write itself, namely BF16."""
     import struct
@@ -48,7 +62,11 @@ def _write_raw_safetensors(path, entries: dict[str, tuple[str, tuple[int, ...], 
     for name, (dtype, shape, raw) in entries.items():
         start = len(data)
         data += raw
-        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [start, len(data)]}
+        header[name] = {
+            "dtype": dtype,
+            "shape": list(shape),
+            "data_offsets": [start, len(data)],
+        }
     header_bytes = json.dumps(header).encode()
     with path.open("wb") as f:
         f.write(struct.pack("<Q", len(header_bytes)))
@@ -195,7 +213,9 @@ def test_load_many_matches_individually_loading_each_expert(tmp_path):
     for e, a in zip(expected, actual):
         for proj in PROJECTIONS:
             for field in ("weight", "scales", "biases"):
-                np.testing.assert_array_equal(np.array(e[proj][field]), np.array(a[proj][field]))
+                np.testing.assert_array_equal(
+                    np.array(e[proj][field]), np.array(a[proj][field])
+                )
 
     streamer.close()
 
@@ -210,7 +230,9 @@ def test_load_many_mixes_hits_and_misses_correctly(tmp_path):
         results = cache.load_many(0, [0, 1, 2])  # 0 is a hit, 1 and 2 are misses
 
         assert cache.hits == 1
-        assert cache.misses == 3  # the initial load_expert(0,0) + the 2 misses in load_many
+        assert (
+            cache.misses == 3
+        )  # the initial load_expert(0,0) + the 2 misses in load_many
         assert len(results) == 3
         assert (0, 0) in cache and (0, 1) in cache and (0, 2) in cache
     streamer.close()

@@ -24,7 +24,9 @@ MAX_CONTEXT = 64
 
 @pytest.fixture(scope="module")
 def config():
-    return model_config_from_hf(json.loads((QWEN3_5_MODEL_DIR / "config.json").read_text()))
+    return model_config_from_hf(
+        json.loads((QWEN3_5_MODEL_DIR / "config.json").read_text())
+    )
 
 
 @pytest.fixture(scope="module")
@@ -135,7 +137,9 @@ def test_chat_session_reset_prefers_cheap_reset_cache_when_available(monkeypatch
     assert session.model is fake_model
 
 
-def test_chat_session_reset_falls_back_to_a_full_rebuild_without_reset_cache(monkeypatch):
+def test_chat_session_reset_falls_back_to_a_full_rebuild_without_reset_cache(
+    monkeypatch,
+):
     from mlx_lean_moe.runtime import generate as generate_module
 
     built: list[_FakeModelWithoutResetCache] = []

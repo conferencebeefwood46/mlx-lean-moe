@@ -58,7 +58,9 @@ def keeps_stored_width(name: str) -> bool:
     return name.rpartition(".")[2] in _STORED_WIDTH_FIELDS
 
 
-def decode_tensor(raw: bytes, dtype: str, shape: tuple[int, ...], *, stored_width: bool = False) -> mx.array:
+def decode_tensor(
+    raw: bytes, dtype: str, shape: tuple[int, ...], *, stored_width: bool = False
+) -> mx.array:
     if dtype == "BF16" and stored_width:
         # Reinterpreted rather than widened: MLX's quantized matmul reads
         # bf16 scales bit-identically, and widening doubles what they cost.
@@ -84,7 +86,9 @@ def _as_float32(array: mx.array | None) -> mx.array | None:
     return array.astype(mx.float32)
 
 
-def validate_linear_layout(index: dict[str, TensorLocation], name: str, quant: QuantScheme) -> bool:
+def validate_linear_layout(
+    index: dict[str, TensorLocation], name: str, quant: QuantScheme
+) -> bool:
     """Validate a projection's packed shape; return whether it is quantized."""
     weight_name = f"{name}.weight"
     if weight_name not in index:
@@ -103,9 +107,13 @@ def validate_linear_layout(index: dict[str, TensorLocation], name: str, quant: Q
     weight = index[weight_name]
     scales = index[scale_name]
     if weight.shape[:-1] != scales.shape[:-1]:
-        raise ValueError(f"{name} weight shape {weight.shape} is incompatible with scales shape {scales.shape}")
+        raise ValueError(
+            f"{name} weight shape {weight.shape} is incompatible with scales shape {scales.shape}"
+        )
     if has_biases and index[bias_name].shape != scales.shape:
-        raise ValueError(f"{name} biases shape {index[bias_name].shape} does not match scales shape {scales.shape}")
+        raise ValueError(
+            f"{name} biases shape {index[bias_name].shape} does not match scales shape {scales.shape}"
+        )
     logical_width = scales.shape[-1] * quant.group_size
     expected_packed_width = logical_width * quant.bits // 32
     if weight.shape[-1] != expected_packed_width:
@@ -116,12 +124,18 @@ def validate_linear_layout(index: dict[str, TensorLocation], name: str, quant: Q
     return True
 
 
-def read_linear(streamer: "TensorStreamer", name: str, quant: QuantScheme) -> LinearWeights:
+def read_linear(
+    streamer: "TensorStreamer", name: str, quant: QuantScheme
+) -> LinearWeights:
     """Read a quantized projection or a plain FP matrix from its real fields."""
     quantized = validate_linear_layout(streamer.index, name, quant)
     if not quantized:
         return LinearWeights(streamer.read_tensor(f"{name}.weight"), None)
-    fields = {field for field in ("weight", "scales", "biases") if f"{name}.{field}" in streamer.index}
+    fields = {
+        field
+        for field in ("weight", "scales", "biases")
+        if f"{name}.{field}" in streamer.index
+    }
     tensors = {field: streamer.read_tensor(f"{name}.{field}") for field in fields}
     return LinearWeights(tensors, quant)
 
@@ -139,7 +153,9 @@ class TensorStreamer:
         loc = self.index[name]
         fd = self._fds.fd_for_shard(loc.shard)
         raw = os.pread(fd, loc.length, loc.offset)
-        return decode_tensor(raw, loc.dtype, loc.shape, stored_width=keeps_stored_width(name))
+        return decode_tensor(
+            raw, loc.dtype, loc.shape, stored_width=keeps_stored_width(name)
+        )
 
     def read_rows(self, name: str, rows: Sequence[int]) -> mx.array:
         """Reads only the given rows, stacked in the order asked for, one
@@ -148,12 +164,16 @@ class TensorStreamer:
             raise ValueError(f"no rows requested from {name}")
         loc = self.index[name]
         if len(loc.shape) < 2:
-            raise ValueError(f"{name} has shape {loc.shape}, which has no rows to index")
+            raise ValueError(
+                f"{name} has shape {loc.shape}, which has no rows to index"
+            )
 
         num_rows = loc.shape[0]
         row_bytes, remainder = divmod(loc.length, num_rows)
         if remainder:
-            raise ValueError(f"{name} is {loc.length} bytes over {num_rows} rows, which does not divide")
+            raise ValueError(
+                f"{name} is {loc.length} bytes over {num_rows} rows, which does not divide"
+            )
 
         fd = self._fds.fd_for_shard(loc.shard)
         chunks = []
@@ -243,7 +263,9 @@ class CachedExpertLoader:
         self._insert(key, value)
         return value
 
-    def load_many(self, layer: int, experts: list[int]) -> list[dict[str, dict[str, mx.array]]]:
+    def load_many(
+        self, layer: int, experts: list[int]
+    ) -> list[dict[str, dict[str, mx.array]]]:
         """`load_expert` for each of `experts`, with cache-miss reads run
         concurrently on `executor` when one was given."""
         results: list[dict | None] = [None] * len(experts)
@@ -270,7 +292,9 @@ class CachedExpertLoader:
                 results[pos] = value
         else:
             miss_experts = [expert for _, expert in misses]
-            loaded = self._streamer.load_experts_concurrently(layer, miss_experts, self._executor)
+            loaded = self._streamer.load_experts_concurrently(
+                layer, miss_experts, self._executor
+            )
             for (pos, expert), value in zip(misses, loaded):
                 self.misses += 1
                 self._insert((layer, expert), value)

@@ -134,7 +134,9 @@ def test_fetch_range_restarts_an_oversized_part(server, client, tmp_path):
     assert out.read_bytes() == PAYLOAD[1000:2000]
 
 
-def test_fetch_range_reports_a_resumed_prefix_without_refetching_it(server, client, tmp_path):
+def test_fetch_range_reports_a_resumed_prefix_without_refetching_it(
+    server, client, tmp_path
+):
     """Bytes already on disk are progress too; ignoring them starts a
     resumed download at 0%."""
     out = tmp_path / "part"
@@ -147,11 +149,15 @@ def test_fetch_range_reports_a_resumed_prefix_without_refetching_it(server, clie
     assert sum(deltas) == 1000
 
 
-def test_fetch_range_starting_from_an_oversized_part_still_totals_the_range(server, client, tmp_path):
+def test_fetch_range_starting_from_an_oversized_part_still_totals_the_range(
+    server, client, tmp_path
+):
     """After a discard and refetch the deltas must still add up to the range
     itself, not to the range plus what the bad file held."""
     out = tmp_path / "part"
-    out.write_bytes(PAYLOAD[1000:1400] + PAYLOAD[1000:2000])  # 1400 bytes for a 1000-byte range
+    out.write_bytes(
+        PAYLOAD[1000:1400] + PAYLOAD[1000:2000]
+    )  # 1400 bytes for a 1000-byte range
     deltas = []
 
     _fetch_range(client, f"{server}/model.bin", out, 1000, 1999, on_bytes=deltas.append)
@@ -159,22 +165,36 @@ def test_fetch_range_starting_from_an_oversized_part_still_totals_the_range(serv
     assert sum(deltas) == 1000
 
 
-def test_fetch_range_takes_back_the_bytes_of_a_part_it_discards(server_ignoring_ranges, tmp_path):
+def test_fetch_range_takes_back_the_bytes_of_a_part_it_discards(
+    server_ignoring_ranges, tmp_path
+):
     """Bytes reported for a part that is then discarded have to be taken
     back, or every doomed attempt drives the total past 100%."""
     out = tmp_path / "part"
     deltas = []
 
     with httpx.Client(follow_redirects=True) as client, pytest.raises(RuntimeError):
-        _fetch_range(client, f"{server_ignoring_ranges}/model.bin", out, 1000, 1999, attempts=3, on_bytes=deltas.append)
+        _fetch_range(
+            client,
+            f"{server_ignoring_ranges}/model.bin",
+            out,
+            1000,
+            1999,
+            attempts=3,
+            on_bytes=deltas.append,
+        )
 
-    assert any(d < 0 for d in deltas), "the discarded part's bytes were never taken back"
+    assert any(d < 0 for d in deltas), (
+        "the discarded part's bytes were never taken back"
+    )
     # Three attempts each fetched the whole 300kB payload for a 1000-byte
     # range, and the total still reflects only what is on disk at the end.
     assert sum(deltas) == (out.stat().st_size if out.exists() else 0)
 
 
-def test_fetch_range_is_a_no_op_when_the_part_is_already_complete(server, client, tmp_path):
+def test_fetch_range_is_a_no_op_when_the_part_is_already_complete(
+    server, client, tmp_path
+):
     out = tmp_path / "part"
     out.write_bytes(PAYLOAD[1000:2000])
     mtime = out.stat().st_mtime_ns
@@ -194,7 +214,9 @@ def test_download_file_assembles_parts_in_order(server, client, tmp_path):
     target = tmp_path / "model.bin"
     remote = RemoteFile("model.bin", len(PAYLOAD), hashlib.sha256(PAYLOAD).hexdigest())
 
-    _download_file(client, f"{server}/model.bin", target, remote, chunk_size=32_000, connections=4)
+    _download_file(
+        client, f"{server}/model.bin", target, remote, chunk_size=32_000, connections=4
+    )
 
     assert target.read_bytes() == PAYLOAD
     # Parts are cleaned up once the whole file verifies.
@@ -206,7 +228,14 @@ def test_download_file_rejects_a_wrong_sha256(server, client, tmp_path):
     remote = RemoteFile("model.bin", len(PAYLOAD), "0" * 64)
 
     with pytest.raises(RuntimeError, match="sha256"):
-        _download_file(client, f"{server}/model.bin", target, remote, chunk_size=32_000, connections=4)
+        _download_file(
+            client,
+            f"{server}/model.bin",
+            target,
+            remote,
+            chunk_size=32_000,
+            connections=4,
+        )
 
     # The bad assembly is removed rather than left to be loaded later.
     assert not target.exists()
@@ -218,7 +247,9 @@ def test_download_file_skips_a_file_that_is_already_complete(server, client, tmp
     mtime = target.stat().st_mtime_ns
     remote = RemoteFile("model.bin", len(PAYLOAD), hashlib.sha256(PAYLOAD).hexdigest())
 
-    _download_file(client, f"{server}/model.bin", target, remote, chunk_size=32_000, connections=4)
+    _download_file(
+        client, f"{server}/model.bin", target, remote, chunk_size=32_000, connections=4
+    )
 
     assert target.stat().st_mtime_ns == mtime
 
@@ -227,7 +258,9 @@ def test_download_file_handles_a_file_smaller_than_one_chunk(server, client, tmp
     target = tmp_path / "small.json"
     remote = RemoteFile("small.json", 18, None)
 
-    _download_file(client, f"{server}/small.json", target, remote, chunk_size=32_000, connections=4)
+    _download_file(
+        client, f"{server}/small.json", target, remote, chunk_size=32_000, connections=4
+    )
 
     assert target.read_bytes() == b'{"hello": "world"}'
 
@@ -257,11 +290,15 @@ def _serve_locally(monkeypatch, server):
     these need no network metadata call."""
     import mlx_lean_moe.weights.download as dl
 
-    monkeypatch.setattr("mlx_lean_moe.weights.download.httpx.Client", partial(httpx.Client, base_url=""))
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.httpx.Client", partial(httpx.Client, base_url="")
+    )
     original = dl._download_file
 
     def to_local(client, url, target, remote, *args, **kwargs):
-        return original(client, f"{server}/{remote.name}", target, remote, *args, **kwargs)
+        return original(
+            client, f"{server}/{remote.name}", target, remote, *args, **kwargs
+        )
 
     monkeypatch.setattr(dl, "_download_file", to_local)
 
@@ -276,16 +313,25 @@ def test_download_repo_writes_every_file_and_resumes(monkeypatch, server, tmp_pa
     _serve_locally(monkeypatch, server)
 
     dest = download_repo(
-        "some-org/some-model", root=tmp_path, files=files, chunk_size=64_000, connections=3, commit=COMMIT
+        "some-org/some-model",
+        root=tmp_path,
+        files=files,
+        chunk_size=64_000,
+        connections=3,
+        commit=COMMIT,
     )
 
     assert dest == snapshot_dir("some-org/some-model", tmp_path)
     assert (dest / "model.bin").read_bytes() == PAYLOAD
     assert (dest / "small.json").read_bytes() == b'{"hello": "world"}'
-    assert not (repo_dir("some-org/some-model", tmp_path) / ".parts").exists()  # cleaned up when empty
+    assert not (
+        repo_dir("some-org/some-model", tmp_path) / ".parts"
+    ).exists()  # cleaned up when empty
 
 
-def test_download_repo_reports_progress_across_the_whole_repo(monkeypatch, server, tmp_path):
+def test_download_repo_reports_progress_across_the_whole_repo(
+    monkeypatch, server, tmp_path
+):
     """Totals are repo-wide: per file, a bar restarts at 0% once per shard.
     The last call reports the whole thing done."""
     files = [
@@ -311,7 +357,9 @@ def test_download_repo_reports_progress_across_the_whole_repo(monkeypatch, serve
     assert {name for name, _, _ in seen} == {"small.json", "model.bin"}
 
 
-def test_download_repo_counts_files_that_were_already_there(monkeypatch, server, tmp_path):
+def test_download_repo_counts_files_that_were_already_there(
+    monkeypatch, server, tmp_path
+):
     """Resuming a checkpoint whose small files landed before the interruption
     must not start the bar at 0%: those bytes are on disk and are progress."""
     files = [
@@ -347,7 +395,9 @@ def test_the_cache_layout_is_the_hub_s_own(tmp_path):
     repo = repo_dir("org/name", tmp_path)
     (repo / "snapshots" / COMMIT).mkdir(parents=True)
     (repo / "refs").mkdir()
-    (repo / "refs" / "main").write_text(COMMIT + "\n")  # git writes a newline; resolving must not care
+    (repo / "refs" / "main").write_text(
+        COMMIT + "\n"
+    )  # git writes a newline; resolving must not care
     assert snapshot_dir("org/name", tmp_path) == repo / "snapshots" / COMMIT
     # A commit is taken as one, without consulting refs.
     assert snapshot_dir("org/name", tmp_path, COMMIT) == repo / "snapshots" / COMMIT
@@ -360,9 +410,15 @@ def test_a_blob_is_named_the_way_the_hub_names_it(tmp_path):
     path = tmp_path / "small.json"
     path.write_bytes(b"hello")
 
-    assert blob_id(RemoteFile("small.json", 5, "published-sha256"), path) == "published-sha256"
+    assert (
+        blob_id(RemoteFile("small.json", 5, "published-sha256"), path)
+        == "published-sha256"
+    )
     # git hash-object: sha1 over "blob <size>\0" then the bytes.
-    assert blob_id(RemoteFile("small.json", 5, None), path) == hashlib.sha1(b"blob 5\0hello").hexdigest()
+    assert (
+        blob_id(RemoteFile("small.json", 5, None), path)
+        == hashlib.sha1(b"blob 5\0hello").hexdigest()
+    )
 
 
 def test_a_downloaded_file_is_a_link_into_blobs(monkeypatch, server, tmp_path):
@@ -373,14 +429,24 @@ def test_a_downloaded_file_is_a_link_into_blobs(monkeypatch, server, tmp_path):
     _serve_locally(monkeypatch, server)
 
     dest = download_repo(
-        "some-org/some-model", root=tmp_path, files=files, chunk_size=64_000, connections=3, commit=COMMIT
+        "some-org/some-model",
+        root=tmp_path,
+        files=files,
+        chunk_size=64_000,
+        connections=3,
+        commit=COMMIT,
     )
 
     link = dest / "model.bin"
     assert link.is_symlink()
     assert not os.path.isabs(os.readlink(link))
-    assert link.resolve() == (repo_dir("some-org/some-model", tmp_path) / "blobs" / payload_sha).resolve()
-    assert (repo_dir("some-org/some-model", tmp_path) / "refs" / "main").read_text().strip() == COMMIT
+    assert (
+        link.resolve()
+        == (repo_dir("some-org/some-model", tmp_path) / "blobs" / payload_sha).resolve()
+    )
+    assert (
+        repo_dir("some-org/some-model", tmp_path) / "refs" / "main"
+    ).read_text().strip() == COMMIT
 
 
 def test_sha256_of_matches_hashlib(tmp_path):
@@ -402,11 +468,15 @@ def _write_runnable_checkpoint(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "config.json").write_text('{"model_type": "fake"}')
     (directory / "tokenizer.json").write_text("{}")
-    save_file({"a": np.zeros(8, dtype=np.float32)}, str(directory / "model.safetensors"))
+    save_file(
+        {"a": np.zeros(8, dtype=np.float32)}, str(directory / "model.safetensors")
+    )
 
 
 def _exploding_repo_files(*args, **kwargs):
-    raise AssertionError("is_complete asked the hub about an already-complete checkpoint")
+    raise AssertionError(
+        "is_complete asked the hub about an already-complete checkpoint"
+    )
 
 
 def _cached_snapshot(repo_id: str, root) -> "Path":
@@ -422,7 +492,9 @@ def _cached_snapshot(repo_id: str, root) -> "Path":
 
 def test_a_complete_checkpoint_never_asks_the_hub(tmp_path, monkeypatch):
     _write_runnable_checkpoint(_cached_snapshot("org/model", tmp_path))
-    monkeypatch.setattr("mlx_lean_moe.weights.download.repo_files", _exploding_repo_files)
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
+    )
     assert is_complete("org/model", root=tmp_path) is True
 
 
@@ -454,7 +526,9 @@ def test_missing_tokenizer_is_incomplete_even_with_whole_shards(tmp_path, monkey
     directory = _cached_snapshot("org/model", tmp_path)
     _write_runnable_checkpoint(directory)
     (directory / "tokenizer.json").unlink()
-    monkeypatch.setattr("mlx_lean_moe.weights.download.repo_files", _exploding_repo_files)
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
+    )
     assert is_complete("org/model", root=tmp_path) is False
 
 
@@ -465,12 +539,16 @@ def test_leftover_parts_mean_a_download_stopped_partway(tmp_path, monkeypatch):
     parts = repo_dir("org/model", tmp_path) / ".parts"
     parts.mkdir()
     (parts / "tokenizer.json.0000").write_bytes(b"partial")
-    monkeypatch.setattr("mlx_lean_moe.weights.download.repo_files", _exploding_repo_files)
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
+    )
     assert is_complete("org/model", root=tmp_path) is False
 
 
 def test_a_directory_that_was_never_downloaded_is_incomplete(tmp_path, monkeypatch):
-    monkeypatch.setattr("mlx_lean_moe.weights.download.repo_files", _exploding_repo_files)
+    monkeypatch.setattr(
+        "mlx_lean_moe.weights.download.repo_files", _exploding_repo_files
+    )
     assert is_complete("org/nothing", root=tmp_path) is False
 
 
@@ -493,7 +571,9 @@ def test_a_rate_limited_range_waits_before_retrying(tmp_path, monkeypatch):
             )
 
     with pytest.raises(RuntimeError):
-        _fetch_range(_Refusing(), "http://example/x", tmp_path / "part", 0, 99, attempts=3)
+        _fetch_range(
+            _Refusing(), "http://example/x", tmp_path / "part", 0, 99, attempts=3
+        )
 
     assert attempts["n"] == 3
     assert slept == [7.0, 7.0, 7.0]
@@ -505,10 +585,16 @@ def test_backoff_grows_when_the_server_names_no_delay(tmp_path, monkeypatch):
 
     class _Overloaded:
         def stream(self, method, url, headers=None):
-            raise httpx.HTTPStatusError("unavailable", request=httpx.Request("GET", url), response=httpx.Response(503))
+            raise httpx.HTTPStatusError(
+                "unavailable",
+                request=httpx.Request("GET", url),
+                response=httpx.Response(503),
+            )
 
     with pytest.raises(RuntimeError):
-        _fetch_range(_Overloaded(), "http://example/x", tmp_path / "part", 0, 99, attempts=4)
+        _fetch_range(
+            _Overloaded(), "http://example/x", tmp_path / "part", 0, 99, attempts=4
+        )
 
     assert slept == [1.0, 2.0, 4.0, 8.0]
 
@@ -524,6 +610,8 @@ def test_an_ordinary_failure_is_retried_without_waiting(tmp_path, monkeypatch):
             raise httpx.ConnectError("dropped")
 
     with pytest.raises(RuntimeError):
-        _fetch_range(_Dropping(), "http://example/x", tmp_path / "part", 0, 99, attempts=3)
+        _fetch_range(
+            _Dropping(), "http://example/x", tmp_path / "part", 0, 99, attempts=3
+        )
 
     assert slept == []

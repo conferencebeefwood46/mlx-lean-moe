@@ -11,7 +11,10 @@ import pytest
 
 import mlx_lean_moe
 
-MODULES = sorted(module.name for module in pkgutil.walk_packages(mlx_lean_moe.__path__, "mlx_lean_moe."))
+MODULES = sorted(
+    module.name
+    for module in pkgutil.walk_packages(mlx_lean_moe.__path__, "mlx_lean_moe.")
+)
 
 
 def test_the_package_has_modules_to_check():

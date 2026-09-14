@@ -34,7 +34,13 @@ TOP_K = 3
 MOE_INTER = 64
 SHARED_INTER = 128
 PREFIX = "language_model.model"
-LINEAR = LinearParams(num_key_heads=2, num_value_heads=4, key_head_dim=32, value_head_dim=32, conv_kernel_dim=4)
+LINEAR = LinearParams(
+    num_key_heads=2,
+    num_value_heads=4,
+    key_head_dim=32,
+    value_head_dim=32,
+    conv_kernel_dim=4,
+)
 
 
 def _config() -> Qwen3_5Config:
@@ -65,7 +71,9 @@ def _config() -> Qwen3_5Config:
 
 def _quantize(dense: mx.array):
     w, scales, biases = mx.quantize(dense, group_size=GROUP_SIZE, bits=BITS)
-    effective = mx.dequantize(w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS)
+    effective = mx.dequantize(
+        w, scales=scales, biases=biases, group_size=GROUP_SIZE, bits=BITS
+    )
     return {"weight": w, "scales": scales, "biases": biases}, effective
 
 
@@ -200,7 +208,10 @@ def test_norm_topk_prob_changes_the_scores(moe_pair):
     unnormalized_router = Qwen3_5Router(
         Qwen3_5Config(
             **{
-                **{f.name: getattr(config, f.name) for f in config.__dataclass_fields__.values()},
+                **{
+                    f.name: getattr(config, f.name)
+                    for f in config.__dataclass_fields__.values()
+                },
                 "norm_topk_prob": False,
             }
         ),  # type: ignore[arg-type]
@@ -242,7 +253,9 @@ def test_router_order_only_matters_without_norm_topk_prob():
 
     # The other order: top-k of the raw logits, softmax over the winners.
     other_indices = mx.argpartition(-logits, kth=k - 1, axis=-1)[..., :k]
-    other_scores = mx.softmax(mx.take_along_axis(logits, other_indices, axis=-1), axis=-1, precise=True)
+    other_scores = mx.softmax(
+        mx.take_along_axis(logits, other_indices, axis=-1), axis=-1, precise=True
+    )
 
     mx.eval(qwen_indices, other_indices, qwen_scores, qwen_normalized, other_scores)
 
@@ -264,10 +277,14 @@ def test_batched_experts_match_computing_each_position_alone(moe_pair):
     indices, weights = ours["router"](x)
 
     batched = ours["experts"](x, indices, weights)
-    one_at_a_time = mx.stack([ours["experts"](x[t], indices[t], weights[t]) for t in range(x.shape[0])])
+    one_at_a_time = mx.stack(
+        [ours["experts"](x[t], indices[t], weights[t]) for t in range(x.shape[0])]
+    )
 
     assert batched.shape == one_at_a_time.shape
-    assert mx.allclose(batched, one_at_a_time, atol=1e-6), float(mx.abs(batched - one_at_a_time).max())
+    assert mx.allclose(batched, one_at_a_time, atol=1e-6), float(
+        mx.abs(batched - one_at_a_time).max()
+    )
 
 
 def test_batched_experts_route_each_position_to_its_own_experts(moe_pair):
@@ -284,4 +301,6 @@ def test_batched_experts_route_each_position_to_its_own_experts(moe_pair):
     batched = ours["experts"](x, indices, weights)
     for t in range(positions):
         alone = ours["experts"](x[t], indices[t], weights[t])
-        assert mx.allclose(batched[t], alone, atol=1e-6), f"position {t} did not go through expert {t}"
+        assert mx.allclose(batched[t], alone, atol=1e-6), (
+            f"position {t} did not go through expert {t}"
+        )

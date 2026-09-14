@@ -53,7 +53,10 @@ QWEN3_5_QUANTIZATION = {
     "bits": 4,
     "mode": "affine",
     "language_model.model.layers.0.mlp.gate": {"group_size": 64, "bits": 8},
-    "language_model.model.layers.0.mlp.shared_expert_gate": {"group_size": 64, "bits": 8},
+    "language_model.model.layers.0.mlp.shared_expert_gate": {
+        "group_size": 64,
+        "bits": 8,
+    },
 }
 
 QWEN3_5_CONFIG = {
@@ -76,17 +79,39 @@ def test_qwen3_5_maps_core_fields():
 
 def test_qwen3_5_marks_three_in_four_layers_as_linear():
     config = model_config_from_hf(QWEN3_5_CONFIG)
-    assert config.is_linear_per_layer == (True, True, True, False, True, True, True, False)
+    assert config.is_linear_per_layer == (
+        True,
+        True,
+        True,
+        False,
+        True,
+        True,
+        True,
+        False,
+    )
 
 
 def test_qwen3_5_derives_layer_types_when_not_published():
     text = dict(QWEN3_5_TEXT_CONFIG)
     del text["layer_types"]
     config = model_config_from_hf(
-        {"model_type": "qwen3_5_moe", "text_config": text, "quantization_config": QWEN3_5_QUANTIZATION}
+        {
+            "model_type": "qwen3_5_moe",
+            "text_config": text,
+            "quantization_config": QWEN3_5_QUANTIZATION,
+        }
     )
     # Same pattern derived from full_attention_interval=4.
-    assert config.is_linear_per_layer == (True, True, True, False, True, True, True, False)
+    assert config.is_linear_per_layer == (
+        True,
+        True,
+        True,
+        False,
+        True,
+        True,
+        True,
+        False,
+    )
 
 
 def test_qwen3_5_linear_attention_shape():
@@ -134,7 +159,11 @@ def test_qwen3_5_resolves_exact_mixed_quantization_per_projection():
         }
     )
     config = model_config_from_hf(
-        {"model_type": "qwen3_5_moe", "text_config": QWEN3_5_TEXT_CONFIG, "quantization_config": quant}
+        {
+            "model_type": "qwen3_5_moe",
+            "text_config": QWEN3_5_TEXT_CONFIG,
+            "quantization_config": quant,
+        }
     )
 
     layer0 = "language_model.model.layers.0.mlp.switch_mlp"
@@ -162,7 +191,11 @@ def test_qwen3_5_ignores_a_multi_token_prediction_head():
     text = dict(QWEN3_5_TEXT_CONFIG)
     text["mtp_num_hidden_layers"] = 1
     config = model_config_from_hf(
-        {"model_type": "qwen3_5_moe", "text_config": text, "quantization_config": QWEN3_5_QUANTIZATION}
+        {
+            "model_type": "qwen3_5_moe",
+            "text_config": text,
+            "quantization_config": QWEN3_5_QUANTIZATION,
+        }
     )
     assert config.num_layers == 8  # unchanged: the MTP head isn't one of them
 
@@ -179,5 +212,9 @@ def test_qwen3_5_rejects_unimplemented_mechanisms(field, value, message):
     text[field] = value
     with pytest.raises(ValueError, match=message):
         model_config_from_hf(
-            {"model_type": "qwen3_5_moe", "text_config": text, "quantization_config": QWEN3_5_QUANTIZATION}
+            {
+                "model_type": "qwen3_5_moe",
+                "text_config": text,
+                "quantization_config": QWEN3_5_QUANTIZATION,
+            }
         )

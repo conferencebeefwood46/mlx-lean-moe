@@ -14,7 +14,10 @@ from mlx_lean_moe.model.qwen3_5._gated_delta_metal import gated_delta_scan_metal
 def forget_gate(a: mx.array, A_log: mx.array, dt_bias: mx.array) -> mx.array:
     """Per-value-head decay in (0, 1], for one position. In float32: it
     feeds a product accumulated over the whole sequence."""
-    return mx.exp(-mx.exp(A_log.astype(mx.float32)) * nn.softplus(a.astype(mx.float32) + dt_bias.astype(mx.float32)))
+    return mx.exp(
+        -mx.exp(A_log.astype(mx.float32))
+        * nn.softplus(a.astype(mx.float32) + dt_bias.astype(mx.float32))
+    )
 
 
 def gated_delta_step(
@@ -48,13 +51,19 @@ def gated_delta_scan(
     """Runs :func:`gated_delta_step` over ``L`` positions in order, on Metal
     where supported; ``use_kernel=False`` forces the ops path."""
     if q.ndim != 3 or k.shape != q.shape or v.ndim != 3:
-        raise ValueError("q/k must have matching (L, key_heads, key_dim) shapes; v must be 3-D")
+        raise ValueError(
+            "q/k must have matching (L, key_heads, key_dim) shapes; v must be 3-D"
+        )
     length, key_heads, key_dim = q.shape
     _, value_heads, value_dim = v.shape
     if min(length, key_heads, key_dim, value_heads, value_dim) <= 0:
-        raise ValueError("gated_delta_scan requires nonempty sequence and head dimensions")
+        raise ValueError(
+            "gated_delta_scan requires nonempty sequence and head dimensions"
+        )
     if v.shape[0] != length or value_heads % key_heads:
-        raise ValueError("v must match q's sequence length and have a multiple of its head count")
+        raise ValueError(
+            "v must match q's sequence length and have a multiple of its head count"
+        )
     if g.shape != (length, value_heads) or beta.shape != g.shape:
         raise ValueError("g and beta must have shape (L, value_heads)")
     if state.shape != (value_heads, value_dim, key_dim):

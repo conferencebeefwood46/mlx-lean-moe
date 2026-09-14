@@ -15,7 +15,11 @@ from pathlib import Path
 import mlx.core as mx
 
 from mlx_lean_moe.weights._shard_fds import ShardFdCache
-from mlx_lean_moe.weights.expert_loader import DEFAULT_PROJECTIONS, decode_tensor, keeps_stored_width
+from mlx_lean_moe.weights.expert_loader import (
+    DEFAULT_PROJECTIONS,
+    decode_tensor,
+    keeps_stored_width,
+)
 from mlx_lean_moe.weights.safetensors_index import TensorLocation
 
 PACK_NAME = "experts.pack"
@@ -28,10 +32,14 @@ class PackLayout:
 
     def __init__(self, document: dict) -> None:
         if document.get("version") != VERSION:
-            raise ValueError(f"expert pack version {document.get('version')!r}, expected {VERSION}")
+            raise ValueError(
+                f"expert pack version {document.get('version')!r}, expected {VERSION}"
+            )
         self.num_experts: int = document["num_experts"]
         self.projections: tuple[str, ...] = tuple(document["projections"])
-        self.layers: dict[int, dict] = {int(k): v for k, v in document["layers"].items()}
+        self.layers: dict[int, dict] = {
+            int(k): v for k, v in document["layers"].items()
+        }
 
     def expert_range(self, layer: int, expert: int) -> tuple[int, int]:
         entry = self.layers[layer]
@@ -80,7 +88,9 @@ def build(
     try:
         with open(model_dir / PACK_NAME, "wb") as pack:
             for layer in range(num_layers):
-                found = _field_locations(index, layer_prefix, stack_name, projections, layer)
+                found = _field_locations(
+                    index, layer_prefix, stack_name, projections, layer
+                )
                 if not found:
                     raise KeyError(f"no stacked expert tensors for layer {layer}")
 
@@ -105,7 +115,11 @@ def build(
                     )
                     within += length
 
-                layers[str(layer)] = {"offset": written, "stride": within, "fields": descriptors}
+                layers[str(layer)] = {
+                    "offset": written,
+                    "stride": within,
+                    "fields": descriptors,
+                }
 
                 # Expert-major: everything one expert needs, then the next.
                 for expert in range(num_experts):
@@ -138,13 +152,18 @@ def verify(packed, original, layers: Sequence[int], experts: Sequence[int]) -> N
             want = original.load_expert(layer, expert)
             got = packed.load_expert(layer, expert)
             if got.keys() != want.keys():
-                raise ValueError(f"layer {layer} expert {expert}: projections {sorted(got)} != {sorted(want)}")
+                raise ValueError(
+                    f"layer {layer} expert {expert}: projections {sorted(got)} != {sorted(want)}"
+                )
             for projection, reference in want.items():
                 mine = got[projection]
                 pairs = (
                     [("", mine, reference)]
                     if isinstance(reference, mx.array)
-                    else [(field, mine[field], tensor) for field, tensor in reference.items()]
+                    else [
+                        (field, mine[field], tensor)
+                        for field, tensor in reference.items()
+                    ]
                 )
                 for field, a, b in pairs:
                     if a.dtype != b.dtype or a.shape != b.shape:
@@ -153,7 +172,9 @@ def verify(packed, original, layers: Sequence[int], experts: Sequence[int]) -> N
                             f"{a.dtype}{a.shape} != {b.dtype}{b.shape}"
                         )
                     if not mx.array_equal(a, b).item():
-                        raise ValueError(f"layer {layer} expert {expert} {projection}.{field}: values differ")
+                        raise ValueError(
+                            f"layer {layer} expert {expert} {projection}.{field}: values differ"
+                        )
 
 
 def load_layout(model_dir: str | Path) -> PackLayout | None:
@@ -176,11 +197,15 @@ class ExpertPackStreamer:
         self.num_experts = layout.num_experts
         self._fd = os.open(self.model_dir / PACK_NAME, os.O_RDONLY)
 
-    def read_expert(self, layer: int, expert: int) -> dict[str, dict[str, mx.array] | mx.array]:
+    def read_expert(
+        self, layer: int, expert: int
+    ) -> dict[str, dict[str, mx.array] | mx.array]:
         offset, stride = self.layout.expert_range(layer, expert)
         blob = os.pread(self._fd, stride, offset)
         if len(blob) != stride:
-            raise OSError(f"pack read returned {len(blob)} bytes for expert {expert} of layer {layer}, want {stride}")
+            raise OSError(
+                f"pack read returned {len(blob)} bytes for expert {expert} of layer {layer}, want {stride}"
+            )
 
         gathered: dict[str, dict[str, mx.array]] = {}
         for descriptor in self.layout.fields(layer):
@@ -202,10 +227,15 @@ class ExpertPackStreamer:
     def load_expert(self, layer: int, expert: int):
         return self.read_expert(layer, expert)
 
-    def load_experts_concurrently(self, layer: int, experts: list[int], executor: Executor):
+    def load_experts_concurrently(
+        self, layer: int, experts: list[int], executor: Executor
+    ):
         """One read per expert rather than one per field, so the fan-out is
         over experts. Results come back in the order asked for."""
-        futures = {executor.submit(self.read_expert, layer, expert): expert for expert in experts}
+        futures = {
+            executor.submit(self.read_expert, layer, expert): expert
+            for expert in experts
+        }
         done: dict[int, dict] = {}
         for future in as_completed(futures):
             done[futures[future]] = future.result()
@@ -264,7 +294,9 @@ def _main() -> None:
         description="Repack a checkpoint's routed experts so each is one contiguous read. "
         "Writes experts.pack beside the weights; delete it to go back."
     )
-    parser.add_argument("checkpoint", help="a downloaded hub repo id, or a checkpoint directory")
+    parser.add_argument(
+        "checkpoint", help="a downloaded hub repo id, or a checkpoint directory"
+    )
     arguments = parser.parse_args()
 
     try:
@@ -275,10 +307,16 @@ def _main() -> None:
     started = time.time()
 
     def show(done: int, total: int) -> None:
-        print(f"  layer {done}/{total}, {time.time() - started:.0f}s", end="\r", file=sys.stderr)
+        print(
+            f"  layer {done}/{total}, {time.time() - started:.0f}s",
+            end="\r",
+            file=sys.stderr,
+        )
 
     path = build_for_checkpoint(model_dir, progress=show)
-    print(f"\nwrote {path} ({path.stat().st_size / 2**30:.2f} GiB) in {time.time() - started:.0f}s")
+    print(
+        f"\nwrote {path} ({path.stat().st_size / 2**30:.2f} GiB) in {time.time() - started:.0f}s"
+    )
 
 
 if __name__ == "__main__":

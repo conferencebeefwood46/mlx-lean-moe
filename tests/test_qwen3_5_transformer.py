@@ -25,7 +25,13 @@ N_HEADS, N_KV_HEADS, HEAD_DIM, ROTARY_DIM = 2, 1, 64, 16
 NUM_EXPERTS, TOP_K, MOE_INTER, SHARED_INTER = 4, 2, 64, 128
 NUM_LAYERS = 4
 PREFIX = "language_model.model"
-LINEAR = LinearParams(num_key_heads=2, num_value_heads=4, key_head_dim=64, value_head_dim=64, conv_kernel_dim=4)
+LINEAR = LinearParams(
+    num_key_heads=2,
+    num_value_heads=4,
+    key_head_dim=64,
+    value_head_dim=64,
+    conv_kernel_dim=4,
+)
 # Same shape as the real checkpoint: every layer linear except the last of
 # each full_attention_interval group.
 IS_LINEAR = (True, True, True, False)
@@ -66,13 +72,21 @@ def _write_layer(tensors: dict, rng, layer: int, is_linear: bool) -> None:
         tensors[f"{attn}.conv1d.weight"] = (
             rng.standard_normal((LINEAR.conv_dim, LINEAR.conv_kernel_dim, 1)) * 0.2
         ).astype(np.float32)
-        tensors[f"{attn}.A_log"] = rng.standard_normal(LINEAR.num_value_heads).astype(np.float32)
-        tensors[f"{attn}.dt_bias"] = rng.standard_normal(LINEAR.num_value_heads).astype(np.float32)
+        tensors[f"{attn}.A_log"] = rng.standard_normal(LINEAR.num_value_heads).astype(
+            np.float32
+        )
+        tensors[f"{attn}.dt_bias"] = rng.standard_normal(LINEAR.num_value_heads).astype(
+            np.float32
+        )
         tensors[f"{attn}.norm.weight"] = _plain(rng, LINEAR.value_head_dim)
     else:
         attn = f"{prefix}.self_attn"
         for name, out_dim, in_dim in (
-            ("q_proj", N_HEADS * HEAD_DIM * 2, HIDDEN),  # queries + the fused output gate
+            (
+                "q_proj",
+                N_HEADS * HEAD_DIM * 2,
+                HIDDEN,
+            ),  # queries + the fused output gate
             ("k_proj", N_KV_HEADS * HEAD_DIM, HIDDEN),
             ("v_proj", N_KV_HEADS * HEAD_DIM, HIDDEN),
             ("o_proj", HIDDEN, N_HEADS * HEAD_DIM),
@@ -180,7 +194,9 @@ def test_transformer_prefills_and_decodes_a_mixed_checkpoint(synthetic_qwen3_5):
     # A mixed checkpoint can leave small projections in floating point while
     # packing each routed-expert projection at a different width.
     dense_name = f"{PREFIX}.layers.0.linear_attn.in_proj_a"
-    tensors[f"{dense_name}.weight"] = rng.normal(0, 0.1, (LINEAR.num_value_heads, HIDDEN)).astype(np.float32)
+    tensors[f"{dense_name}.weight"] = rng.normal(
+        0, 0.1, (LINEAR.num_value_heads, HIDDEN)
+    ).astype(np.float32)
     del tensors[f"{dense_name}.scales"]
     del tensors[f"{dense_name}.biases"]
 
@@ -194,8 +210,12 @@ def test_transformer_prefills_and_decodes_a_mixed_checkpoint(synthetic_qwen3_5):
             size=(NUM_EXPERTS, out_dim, HIDDEN * bits // 32),
             dtype=np.uint32,
         )
-        tensors[f"{name}.scales"] = rng.random((NUM_EXPERTS, out_dim, HIDDEN // 32)).astype(np.float32) * 0.05
-        tensors[f"{name}.biases"] = rng.random((NUM_EXPERTS, out_dim, HIDDEN // 32)).astype(np.float32) * 0.05
+        tensors[f"{name}.scales"] = (
+            rng.random((NUM_EXPERTS, out_dim, HIDDEN // 32)).astype(np.float32) * 0.05
+        )
+        tensors[f"{name}.biases"] = (
+            rng.random((NUM_EXPERTS, out_dim, HIDDEN // 32)).astype(np.float32) * 0.05
+        )
         overrides.append((name, QuantScheme(bits=bits, group_size=32)))
 
     save_file(tensors, str(checkpoint))
@@ -233,12 +253,16 @@ def test_linear_layer_state_does_not_grow_with_context(synthetic_qwen3_5):
     model_dir, config = synthetic_qwen3_5
     model = Qwen3_5Transformer(model_dir, config, max_context=32)
     try:
-        before = [c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)]
+        before = [
+            c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)
+        ]
         logits = model.prefill([1, 2, 3, 4, 5])
         for _ in range(4):
             logits = model(int(mx.argmax(logits).item()))
         mx.eval(logits)
-        after = [c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)]
+        after = [
+            c.ssm_state.shape for c in model.cache if isinstance(c, RecurrentCache)
+        ]
 
         assert before == after
         # The KV layer, by contrast, really did accumulate all 9 positions.
@@ -283,7 +307,9 @@ def test_decoder_layer_rejects_3d_input(synthetic_qwen3_5):
 
 
 @pytest.mark.parametrize("chunk_size", [1, 3, 8])
-def test_chunked_prefill_preserves_logits_and_both_cache_states(synthetic_qwen3_5, chunk_size):
+def test_chunked_prefill_preserves_logits_and_both_cache_states(
+    synthetic_qwen3_5, chunk_size
+):
     import mlx.core as mx
 
     model_dir, config = synthetic_qwen3_5
@@ -341,7 +367,9 @@ def test_the_default_expert_cache_is_one_slot_per_routed_expert(synthetic_qwen3_
 
 def test_an_explicit_expert_cache_overrides_the_default(synthetic_qwen3_5):
     model_dir, config = synthetic_qwen3_5
-    model = Qwen3_5Transformer(model_dir, config, max_context=16, expert_cache_size_per_layer=TOP_K + 3)
+    model = Qwen3_5Transformer(
+        model_dir, config, max_context=16, expert_cache_size_per_layer=TOP_K + 3
+    )
     try:
         assert {loader._max_size for loader in model.expert_loaders} == {TOP_K + 3}
     finally:

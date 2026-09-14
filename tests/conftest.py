@@ -13,7 +13,11 @@ def _validation_checkpoint() -> Path:
     except Exception:
         # Not cached. Return a path that does not exist, so the skip
         # conditions below fire rather than an import blowing up collection.
-        return Path.home() / ".cache/huggingface/hub" / f"models--{QWEN3_5_REPO.replace('/', '--')}"
+        return (
+            Path.home()
+            / ".cache/huggingface/hub"
+            / f"models--{QWEN3_5_REPO.replace('/', '--')}"
+        )
 
 
 QWEN3_5_MODEL_DIR = _validation_checkpoint()

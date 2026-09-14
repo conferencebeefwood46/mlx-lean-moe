@@ -31,7 +31,9 @@ _PYTORCH_NOTICE = "PyTorch was not found"
 def _hush_missing_pytorch() -> None:
     """Silence transformers' import-time warning about PyTorch being absent;
     only its tokenizer is used here."""
-    logging.getLogger("transformers").addFilter(lambda record: _PYTORCH_NOTICE not in record.getMessage())
+    logging.getLogger("transformers").addFilter(
+        lambda record: _PYTORCH_NOTICE not in record.getMessage()
+    )
 
 
 class Engine:
@@ -49,7 +51,9 @@ class Engine:
     ) -> None:
         self.model_id = model_id
         self.think = think
-        self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-lean-moe")
+        self._worker = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="mlx-lean-moe"
+        )
 
         def build() -> None:
             import json as _json
@@ -62,15 +66,23 @@ class Engine:
             from mlx_lean_moe.weights.expert_loader import decode_on_this_thread
 
             decode_on_this_thread()
-            self.tokenizer = AutoTokenizer.from_pretrained(model_dir, local_files_only=True)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_dir, local_files_only=True
+            )
             self.stop_ids = _stop_token_ids(Path(model_dir), self.tokenizer)
-            config = model_config_from_hf(_json.loads((Path(model_dir) / "config.json").read_text()))
-            self.session = ChatSession(model_dir, config, max_context, expert_cache_size_per_layer)
+            config = model_config_from_hf(
+                _json.loads((Path(model_dir) / "config.json").read_text())
+            )
+            self.session = ChatSession(
+                model_dir, config, max_context, expert_cache_size_per_layer
+            )
 
         self._worker.submit(build).result()
         self.max_context = max_context
 
-    def context_error(self, messages: list[dict[str, str]], max_tokens: int) -> str | None:
+    def context_error(
+        self, messages: list[dict[str, str]], max_tokens: int
+    ) -> str | None:
         """Why this request will not fit, checked before a byte is answered:
         a stream has sent its headers by the time the model would raise."""
         prompt = len(self.prompt_ids(messages))
@@ -149,7 +161,9 @@ class Engine:
         sent = 0
         finish = "length"
 
-        for token in self.session.send(prompt, max_new_tokens=max_tokens, sampling=sampling):
+        for token in self.session.send(
+            prompt, max_new_tokens=max_tokens, sampling=sampling
+        ):
             if token in self.stop_ids:
                 finish = "stop"
                 break
@@ -200,7 +214,13 @@ def _completion_id() -> str:
     return "chatcmpl-" + uuid.uuid4().hex
 
 
-def _chunk(completion_id: str, model: str, delta: dict[str, Any], finish: str | None, index: int = 0) -> str:
+def _chunk(
+    completion_id: str,
+    model: str,
+    delta: dict[str, Any],
+    finish: str | None,
+    index: int = 0,
+) -> str:
     body = {
         "id": completion_id,
         "object": "chat.completion.chunk",
@@ -222,7 +242,9 @@ def _logit_bias(raw: Any) -> dict[int, float]:
         try:
             bias[int(token)] = float(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"logit_bias[{token!r}] must be a number keyed by a token id") from exc
+            raise ValueError(
+                f"logit_bias[{token!r}] must be a number keyed by a token id"
+            ) from exc
     return bias
 
 
@@ -253,7 +275,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def _error(self, status: int, message: str) -> None:
-        self._json(status, {"error": {"message": message, "type": "invalid_request_error"}})
+        self._json(
+            status, {"error": {"message": message, "type": "invalid_request_error"}}
+        )
 
     def do_GET(self) -> None:
         if self.path.rstrip("/") in ("/v1/models", "/models"):
@@ -261,7 +285,13 @@ class _Handler(BaseHTTPRequestHandler):
                 200,
                 {
                     "object": "list",
-                    "data": [{"id": self.engine.model_id, "object": "model", "owned_by": "mlx-lean-moe"}],
+                    "data": [
+                        {
+                            "id": self.engine.model_id,
+                            "object": "model",
+                            "owned_by": "mlx-lean-moe",
+                        }
+                    ],
                 },
             )
             return
@@ -284,7 +314,11 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(400, "messages must be a non-empty list")
             return
 
-        max_tokens = request.get("max_tokens") or request.get("max_completion_tokens") or DEFAULT_MAX_TOKENS
+        max_tokens = (
+            request.get("max_tokens")
+            or request.get("max_completion_tokens")
+            or DEFAULT_MAX_TOKENS
+        )
         stop = request.get("stop") or []
         if isinstance(stop, str):
             stop = [stop]
@@ -293,7 +327,9 @@ class _Handler(BaseHTTPRequestHandler):
             choices = _choice_count(request.get("n"))
             sampling = Sampling(
                 temperature=float(request.get("temperature") or 0.0),
-                top_p=float(request.get("top_p") if request.get("top_p") is not None else 1.0),
+                top_p=float(
+                    request.get("top_p") if request.get("top_p") is not None else 1.0
+                ),
                 seed=request.get("seed"),
                 frequency_penalty=float(request.get("frequency_penalty") or 0.0),
                 presence_penalty=float(request.get("presence_penalty") or 0.0),
@@ -317,10 +353,17 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
     def _complete(
-        self, messages: list[dict[str, str]], max_tokens: int, stop: list[str], sampling: Sampling, index: int
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        stop: list[str],
+        sampling: Sampling,
+        index: int,
     ) -> tuple[str, str]:
         text, finish = "", "stop"
-        for piece, reason in self.engine.generate(messages, max_tokens, stop, sampling.for_choice(index)):
+        for piece, reason in self.engine.generate(
+            messages, max_tokens, stop, sampling.for_choice(index)
+        ):
             text += piece
             if reason is not None:
                 finish = reason
@@ -334,7 +377,10 @@ class _Handler(BaseHTTPRequestHandler):
         sampling: Sampling,
         choices: int = 1,
     ) -> None:
-        answers = [self._complete(messages, max_tokens, stop, sampling, index) for index in range(choices)]
+        answers = [
+            self._complete(messages, max_tokens, stop, sampling, index)
+            for index in range(choices)
+        ]
         self._json(
             200,
             {
@@ -374,8 +420,18 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         for index in range(choices):
-            write(_chunk(completion_id, model, {"role": "assistant", "content": ""}, None, index))
-            pieces = self.engine.generate(messages, max_tokens, stop, sampling.for_choice(index))
+            write(
+                _chunk(
+                    completion_id,
+                    model,
+                    {"role": "assistant", "content": ""},
+                    None,
+                    index,
+                )
+            )
+            pieces = self.engine.generate(
+                messages, max_tokens, stop, sampling.for_choice(index)
+            )
             for piece, reason in pieces:
                 if piece:
                     write(_chunk(completion_id, model, {"content": piece}, None, index))
@@ -392,12 +448,16 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
 
     def handle_error(self, request: Any, client_address: Any) -> None:
-        if isinstance(sys.exception(), (ConnectionError, BrokenPipeError, TimeoutError)):
+        if isinstance(
+            sys.exception(), (ConnectionError, BrokenPipeError, TimeoutError)
+        ):
             return
         super().handle_error(request, client_address)
 
 
-def serve(engine: Engine, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
+def serve(
+    engine: Engine, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT
+) -> ThreadingHTTPServer:
     """Start serving `engine`. Returns the server, already listening."""
     handler = type("_BoundHandler", (_Handler,), {"engine": engine})
     return _Server((host, port), handler)
@@ -423,7 +483,9 @@ def _resolve_model(requested: str | None) -> str:
             "no checkpoint is downloaded. Fetch one with:\n  python -m mlx_lean_moe.weights.download <repo id>"
         )
     listed = "\n".join(f"  {repo_id}" for repo_id in cached)
-    raise SystemExit(f"several checkpoints are downloaded; pick one with --model:\n{listed}")
+    raise SystemExit(
+        f"several checkpoints are downloaded; pick one with --model:\n{listed}"
+    )
 
 
 def _main() -> None:
@@ -436,7 +498,9 @@ def _main() -> None:
         description="Serve one checkpoint over an OpenAI-compatible endpoint. "
         "Point aider, or anything else that speaks that API, at the printed base URL.",
     )
-    parser.add_argument("--model", default=None, help="hub repo id (default: the only one downloaded)")
+    parser.add_argument(
+        "--model", default=None, help="hub repo id (default: the only one downloaded)"
+    )
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument(
@@ -469,7 +533,10 @@ def _main() -> None:
     server = serve(engine, arguments.host, arguments.port)
     host, port = server.server_address[:2]
     print(f"serving {model} at http://{host}:{port}/v1", file=sys.stderr)
-    print(f"  aider --openai-api-base http://{host}:{port}/v1 --model openai/{model}", file=sys.stderr)
+    print(
+        f"  aider --openai-api-base http://{host}:{port}/v1 --model openai/{model}",
+        file=sys.stderr,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

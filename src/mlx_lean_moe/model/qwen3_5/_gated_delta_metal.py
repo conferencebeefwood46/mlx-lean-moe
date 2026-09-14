@@ -98,7 +98,12 @@ def gated_delta_scan_metal(q, k, v, g, beta, state) -> tuple[mx.array, mx.array]
     _, value_heads, value_dim = v.shape
     y, new_state = _kernel()(
         inputs=[q, k, v, g, beta, state, length],
-        template=[("Dk", key_dim), ("Dv", value_dim), ("Hk", key_heads), ("Hv", value_heads)],
+        template=[
+            ("Dk", key_dim),
+            ("Dv", value_dim),
+            ("Hk", key_heads),
+            ("Hv", value_heads),
+        ],
         grid=(32, value_dim, value_heads),
         threadgroup=(32, 4, 1),
         output_shapes=[v.shape, state.shape],

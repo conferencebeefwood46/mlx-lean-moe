@@ -65,7 +65,9 @@ def model_config_from_hf(hf_config: dict) -> Any:
     adapter = _ADAPTERS.get(model_type)
     if adapter is None:
         known = ", ".join(sorted(_ADAPTERS))
-        raise ValueError(f"no config adapter for model_type={model_type!r}; known: {known}")
+        raise ValueError(
+            f"no config adapter for model_type={model_type!r}; known: {known}"
+        )
     return adapter(hf_config)
 
 
@@ -74,5 +76,7 @@ def model_class_for(config: Any) -> Callable[..., GenerativeModel]:
     by its concrete type."""
     model_cls = _MODEL_CLASSES.get(type(config))
     if model_cls is None:
-        raise ValueError(f"no model class registered for config type {type(config).__name__}")
+        raise ValueError(
+            f"no model class registered for config type {type(config).__name__}"
+        )
     return model_cls

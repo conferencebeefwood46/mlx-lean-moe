@@ -15,7 +15,12 @@ from mlx_lean_moe.model.qwen3_5.gated_delta import (
 
 mlx_lm_gated_delta = pytest.importorskip("mlx_lm.models.gated_delta")
 
-HK, HV, DK, DV = 2, 6, 16, 8  # small, but with num_value_heads a multiple of num_key_heads like the real model
+HK, HV, DK, DV = (
+    2,
+    6,
+    16,
+    8,
+)  # small, but with num_value_heads a multiple of num_key_heads like the real model
 
 
 def _inputs(seed: int, seq_len: int):
@@ -75,8 +80,12 @@ def test_scan_continues_from_a_carried_state():
 
     whole_y, whole_state = gated_delta_scan(x["q"], x["k"], x["v"], g, beta, zero)
 
-    first_y, mid_state = gated_delta_scan(x["q"][:2], x["k"][:2], x["v"][:2], g[:2], beta[:2], zero)
-    second_y, final_state = gated_delta_scan(x["q"][2:], x["k"][2:], x["v"][2:], g[2:], beta[2:], mid_state)
+    first_y, mid_state = gated_delta_scan(
+        x["q"][:2], x["k"][:2], x["v"][:2], g[:2], beta[:2], zero
+    )
+    second_y, final_state = gated_delta_scan(
+        x["q"][2:], x["k"][2:], x["v"][2:], g[2:], beta[2:], mid_state
+    )
     split_y = mx.concatenate([first_y, second_y])
 
     mx.eval(whole_y, whole_state, split_y, final_state)
